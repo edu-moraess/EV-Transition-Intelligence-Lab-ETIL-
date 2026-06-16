@@ -1,6 +1,6 @@
 import streamlit as st
 
-# Importa cada página do pacote streamlit_pages
+# Importa cada página com alias para nomes amigáveis
 from streamlit_pages import (
     Global_Monitor,
     Country_Lab,
