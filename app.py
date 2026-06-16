@@ -1,14 +1,12 @@
 import streamlit as st
 
-# Importa cada página com alias para nomes amigáveis
-from streamlit_pages import (
-    _01_Global_Monitor as Global_Monitor,
-    _02_Country_Lab as Country_Lab,
-    _03_Diffusion_Engine as Diffusion_Engine,
-    _04_Regime_Detection as Regime_Detection,
-    _05_Forecast_Lab as Forecast_Lab,
-    _06_EVQTI_Ranking as EVQTI_Ranking
-)
+# Importa cada página numerada com alias
+import streamlit_pages.01_Global_Monitor as Global_Monitor
+import streamlit_pages.02_Country_Lab as Country_Lab
+import streamlit_pages.03_Diffusion_Engine as Diffusion_Engine
+import streamlit_pages.04_Regime_Detection as Regime_Detection
+import streamlit_pages.05_Forecast_Lab as Forecast_Lab
+import streamlit_pages.06_EVQTI_Ranking as EVQTI_Ranking
 
 # Dicionário de páginas
 PAGES = {
