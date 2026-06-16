@@ -1,21 +1,21 @@
 # streamlit_pages/06_EVQTI_Ranking.py
+"""
+Página: EVQTI Ranking - ranking quantitativo global.
+"""
 import streamlit as st
 import pandas as pd
-from ingestion.loader import DataLoader
-from preprocessing.cleaning import DataCleaner
-from preprocessing.features import FeatureEngineer
-from models.scoring.evqti import EVQTI
+from analytics.global_ranking import GlobalRanking
+from visualization.charts import Charts
 
-st.title("🏆 EVQTI Ranking")
+def render(df_processed):
+    st.title("🏆 EVQTI Ranking")
+    st.markdown("Índice Quantitativo de Transição de Veículos Elétricos")
 
-loader = DataLoader()
-df = loader.load_from_csv("EV_Data_Explorer_2026_GEVO_clean.csv")
-df = DataCleaner(df).clean()
-df = FeatureEngineer(df).engineer()
+    ranking = GlobalRanking(df_processed)
+    ranking_df = ranking.compute_ranking()
+    st.dataframe(ranking_df)
 
-# Calcular índice
-evqti = EVQTI(df)
-scores = evqti.compute_scores()
-
-st.subheader("Ranking Global")
-st.dataframe(scores.sort_values("EVQTI", ascending=False))
+    # Gráfico de barras
+    fig = Charts.bar_chart(ranking_df.head(20), x="country", y="evqti_score",
+                           title="Top 20 EVQTI")
+    st.plotly_chart(fig, use_container_width=True)
