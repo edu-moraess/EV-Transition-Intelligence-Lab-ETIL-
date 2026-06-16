@@ -1,33 +1,51 @@
 # streamlit_pages/04_Regime_Detection.py
+"""
+Página: Regime Detection - HMM e changepoints.
+"""
 import streamlit as st
+import pandas as pd
 import numpy as np
-import plotly.express as px
-from ingestion.loader import DataLoader
-from preprocessing.cleaning import DataCleaner
-from preprocessing.features import FeatureEngineer
-from models.regimes import HMMRegimeDetector
+from models.regimes import HMMRegimeDetector, BayesianChangePoint
+from visualization.regime_dashboard import RegimeDashboard
 
-st.title("🔀 Regime Detection")
+def render(df_processed):
+    st.title("🔄 Regime Detection")
+    countries = sorted(df_processed["country"].unique())
+    selected = st.selectbox("Selecione um país", countries)
 
-loader = DataLoader()
-df = loader.load_from_csv("EV_Data_Explorer_2026_GEVO_clean.csv")
-df = DataCleaner(df).clean()
-df = FeatureEngineer(df).engineer()
+    if selected:
+        data = df_processed[df_processed["country"] == selected].sort_values("year")
+        if len(data) < 5:
+            st.warning("Dados insuficientes para detecção de regimes.")
+            return
 
-countries = sorted(df["country"].unique())
-selected_country = st.selectbox("Selecione um país:", countries)
+        # Preparar features
+        features = []
+        if "penetration" in data.columns and data["penetration"].notna().any():
+            features.append(data["penetration"].fillna(0).values.reshape(-1, 1))
+        if "growth_rate" in data.columns and data["growth_rate"].notna().any():
+            features.append(data["growth_rate"].fillna(0).values.reshape(-1, 1))
+        if not features:
+            st.error("Features 'penetration' ou 'growth_rate' não disponíveis.")
+            return
+        X = np.hstack(features)
 
-df_country = df[df["country"] == selected_country].sort_values("year")
+        # HMM
+        hmm = HMMRegimeDetector(n_states=4)
+        try:
+            hmm.fit(X)
+            states, probs = hmm.predict_regime(X)
+            st.subheader("Regimes detectados (HMM)")
+            regime_names = [hmm.get_regime_name(s) for s in states]
+            st.write("Estados:", regime_names)
+            # Plot
+            fig = RegimeDashboard.plot_regimes(data["ev_sales"].values, states, probs, hmm.REGIME_NAMES)
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"HMM falhou: {e}")
 
-X = df_country[["growth_rate", "momentum_3y", "volatility"]].fillna(0).values
-hmm = HMMRegimeDetector()
-hmm.fit(X)
-states, probs = hmm.predict_regime(X)
-
-df_country["regime"] = [hmm.get_regime_name(s) for s in states]
-
-st.subheader("Regimes detectados")
-st.dataframe(df_country[["year", "ev_sales", "growth_rate", "regime"]])
-
-fig = px.scatter(df_country, x="year", y="ev_sales", color="regime", title=f"Regimes - {selected_country}")
-st.plotly_chart(fig, use_container_width=True)
+        # Changepoint
+        st.subheader("Bayesian Change Point")
+        cp = BayesianChangePoint()
+        cp_points = cp.detect(data["ev_sales"].values)
+        st.write("Pontos de mudança nos índices:", cp_points)
