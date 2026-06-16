@@ -1,18 +1,31 @@
-# app.py
 import streamlit as st
 
-st.set_page_config(
-    page_title="EV Transition Intelligence Lab",
-    layout="wide",
-    initial_sidebar_state="expanded"
+# Importa cada página do pacote streamlit_pages
+from streamlit_pages import (
+    Global_Monitor,
+    Country_Lab,
+    Diffusion_Engine,
+    Regime_Detection,
+    Forecast_Lab,
+    EVQTI_Ranking
 )
 
-st.sidebar.title("ETIL Navigation")
-st.sidebar.markdown("Selecione uma página:")
+# Dicionário de páginas
+PAGES = {
+    "Global Monitor": Global_Monitor,
+    "Country Lab": Country_Lab,
+    "Diffusion Engine": Diffusion_Engine,
+    "Regime Detection": Regime_Detection,
+    "Forecast Lab": Forecast_Lab,
+    "EVQTI Ranking": EVQTI_Ranking,
+}
 
-st.title("EV Transition Intelligence Lab (ETIL)")
-st.markdown("""
-**Tagline:** *A quantitative framework for modeling the dynamics, regimes, and future paths of global electric vehicle adoption.*
-""")
+def main():
+    st.sidebar.title("Navegação")
+    selection = st.sidebar.radio("Ir para:", list(PAGES.keys()))
 
-st.write("Use o menu lateral para navegar entre as páginas.")
+    page = PAGES[selection]
+    page.app()  # cada página precisa ter uma função app()
+
+if __name__ == "__main__":
+    main()
