@@ -50,4 +50,4 @@ class PCAScore:
         # Se correlação com a média for negativa, inverte
         if np.corrcoef(score, np.mean(X, axis=1))[0, 1] < 0:
             score = -score
-        return score 
+        return score
