@@ -1,4 +1,3 @@
-# models/regimes/__init__.py
 def __getattr__(name):
     if name == "HMMRegimeDetector":
         from .hmm import HMMRegimeDetector
@@ -7,3 +6,4 @@ def __getattr__(name):
         from .changepoint import BayesianChangePoint
         return BayesianChangePoint
     raise AttributeError(f"module 'models.regimes' has no attribute {name!r}")
+    
