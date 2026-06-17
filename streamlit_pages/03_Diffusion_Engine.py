@@ -121,3 +121,4 @@ def render(df: pd.DataFrame):
                 row[f"{name} (k un.)"] = round(model.predict(np.array([ti]))[0]/1e3, 1)
         rows.append(row)
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+ 
