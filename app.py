@@ -1,15 +1,20 @@
-# app.py
 import streamlit as st
 import pandas as pd
-import numpy as np
 import importlib
+
 from ingestion.loader import DataLoader
 from preprocessing.cleaning import DataCleaner
 from preprocessing.transformation import DataTransformer
 from preprocessing.features import FeatureEngineer
 from utils.logger import setup_logger
 
+
 logger = setup_logger(__name__)
+
+
+# ==========================================================
+# Configuração Streamlit
+# ==========================================================
 
 st.set_page_config(
     page_title="EV Transition Intelligence Lab",
@@ -18,120 +23,241 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Design system
+
+# ==========================================================
+# Design System
+# ==========================================================
+
 st.markdown("""
 <style>
-[data-testid="stSidebar"] { background: #0d1117; }
-[data-testid="stSidebar"] * { color: #e6edf3 !important; }
-.metric-card {
-    background: #161b22; border: 1px solid #30363d;
-    border-radius: 8px; padding: 16px 20px; margin: 4px 0;
+[data-testid="stSidebar"] {
+    background: #0d1117;
 }
-.metric-label { color: #8b949e; font-size: 0.78rem; text-transform: uppercase; letter-spacing: .06em; }
-.metric-value { color: #e6edf3; font-size: 1.6rem; font-weight: 700; margin-top: 2px; }
-.metric-delta { font-size: 0.8rem; margin-top: 4px; }
-.delta-up   { color: #3fb950; }
-.delta-down { color: #f85149; }
-h1, h2, h3 { color: #e6edf3 !important; }
+
+[data-testid="stSidebar"] * {
+    color: #e6edf3 !important;
+}
+
+.metric-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 4px 0;
+}
+
+.metric-label {
+    color: #8b949e;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+.metric-value {
+    color: #e6edf3;
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+
+.delta-up {
+    color: #3fb950;
+}
+
+.delta-down {
+    color: #f85149;
+}
+
+h1, h2, h3 {
+    color: #e6edf3 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 
-def load_and_process_data(vehicle_mode: str = "Cars"):
-    """Pipeline com filtro por tipo de veículo"""
-    loader = DataLoader()
-    
+# ==========================================================
+# Pipeline de dados
+# ==========================================================
+
+def load_and_process_data(vehicle_mode: str = "Cars") -> pd.DataFrame:
+    """
+    Pipeline ETIL usando IEA GEVO 2026.
+    """
+
     try:
-        # Passa o modo para o loader
-        df_raw = loader.load_from_csv(vehicle_mode=vehicle_mode)
+        loader = DataLoader()
+
+        # O DataLoader tenta ev_data.csv e,
+        # como ele foi removido, usa IEA 2026 automaticamente.
+        df_raw = loader.load_from_csv("ev_data.csv")
+
+        logger.info(
+            f"Dados carregados: {len(df_raw)} registros"
+        )
+
     except Exception as e:
-        logger.warning(f"Erro no loader: {e}. Usando dummy data.")
-        df_raw = generate_dummy_data()
+        logger.error(f"Erro ao carregar dados: {e}")
+        return pd.DataFrame()
 
-    df_clean  = DataCleaner(df_raw).clean()
-    df_trans  = DataTransformer(df_clean).add_log_transform(["ev_sales"])
-    df_final  = FeatureEngineer(df_trans).engineer()
 
-    # Usar ev_stock_share como penetração real onde disponível
+    # Filtro de veículo
+    if "mode" in df_raw.columns and vehicle_mode != "Total":
+        df_raw = (
+            df_raw[df_raw["mode"] == vehicle_mode]
+            .copy()
+        )
+
+
+    # Limpeza
+    cleaner = DataCleaner(df_raw)
+    df_clean = cleaner.clean()
+
+
+    # Transformações
+    transformer = DataTransformer(df_clean)
+    df_trans = transformer.add_log_transform(
+        ["ev_sales"]
+    )
+
+
+    # Engenharia de features
+    engineer = FeatureEngineer(df_trans)
+    df_final = engineer.engineer()
+
+
+    # Usa o EV stock share como penetração principal
     if "ev_stock_share" in df_final.columns:
-        mask = df_final["ev_stock_share"].notna() & (df_final["ev_stock_share"] > 0)
-        df_final.loc[mask, "penetration"] = df_final.loc[mask, "ev_stock_share"]
 
-    df_final.attrs['vehicle_mode'] = vehicle_mode
+        mask = (
+            df_final["ev_stock_share"].notna()
+            &
+            (df_final["ev_stock_share"] > 0)
+        )
+
+        df_final.loc[
+            mask,
+            "penetration"
+        ] = df_final.loc[
+            mask,
+            "ev_stock_share"
+        ]
+
+
+    logger.info(
+        f"Pipeline concluído: {len(df_final)} registros finais."
+    )
+
+
+    df_final.attrs["vehicle_mode"] = vehicle_mode
+
     return df_final
 
 
-def generate_dummy_data():
-    np.random.seed(42)
-    countries = ["USA","China","Germany","France","UK","Norway","Japan","India","Brazil"]
-    years = list(range(2015, 2026))
-    data = []
-    for c in countries:
-        base = 1000 if c in ["USA","China"] else 100
-        for y in years:
-            ev    = base*(1.2**(y-2015))*(0.9+0.2*np.random.rand())
-            total = ev*(5+10*np.random.rand())
-            chg   = ev*(0.01+0.02*np.random.rand())
-            pop   = 50e6 if c in ["USA","China"] else 10e6
-            gdp   = 2e12 if c in ["USA","China"] else 0.5e12
-            data.append([c,y,ev,total,chg,pop,gdp])
-    return pd.DataFrame(data, columns=["country","year","ev_sales","total_sales",
-                                        "charging_points","population","gdp"])
-
+# ==========================================================
+# Aplicação principal
+# ==========================================================
 
 def main():
+
     st.sidebar.markdown("## ⚡ ETIL v2.1")
-    st.sidebar.markdown("**EV Transition Intelligence Lab**")
+    st.sidebar.markdown(
+        "**EV Transition Intelligence Lab**"
+    )
     st.sidebar.markdown("---")
 
-    # Filtro Global por Tipo de Veículo
-    vehicle_mode_ui = st.sidebar.selectbox(
+
+    vehicle_option = st.sidebar.selectbox(
         "Tipo de Veículo",
-        ["Cars (Passageiros)", "2 and 3 wheelers", "Total (Todos)"],
-        index=0,
-        help="Filtra os dados em todas as abas"
+        [
+            "Cars (Passageiros)",
+            "2 and 3 wheelers",
+            "Total (Todos)"
+        ],
+        index=0
     )
-    vehicle_key = {
+
+
+    vehicle_mode = {
         "Cars (Passageiros)": "Cars",
         "2 and 3 wheelers": "2 and 3 wheelers",
         "Total (Todos)": "Total"
-    }[vehicle_mode_ui]
+    }[vehicle_option]
+
 
     pages = {
-        "🌍 Global Monitor":   "streamlit_pages.01_Global_Monitor",
-        "🔬 Country Lab":      "streamlit_pages.02_Country_Lab",
-        "🧠 Diffusion Engine": "streamlit_pages.03_Diffusion_Engine",
-        "🔄 Regime Detection": "streamlit_pages.04_Regime_Detection",
-        "📊 Forecast Lab":     "streamlit_pages.05_Forecast_Lab",
-        "🏆 EVQTI Ranking":    "streamlit_pages.06_EVQTI_Ranking",
+        "🌍 Global Monitor":
+            "streamlit_pages.01_Global_Monitor",
+
+        "🔬 Country Lab":
+            "streamlit_pages.02_Country_Lab",
+
+        "🧠 Diffusion Engine":
+            "streamlit_pages.03_Diffusion_Engine",
+
+        "🔄 Regime Detection":
+            "streamlit_pages.04_Regime_Detection",
+
+        "📊 Forecast Lab":
+            "streamlit_pages.05_Forecast_Lab",
+
+        "🏆 EVQTI Ranking":
+            "streamlit_pages.06_EVQTI_Ranking",
     }
-    selection = st.sidebar.radio("Navegação", list(pages.keys()))
+
+
+    selection = st.sidebar.radio(
+        "Navegação",
+        list(pages.keys())
+    )
+
 
     st.sidebar.markdown("---")
-    st.sidebar.caption("Fonte: IEA Global EV Outlook 2026")
-    st.sidebar.caption(f"Modo ativo: **{vehicle_mode_ui}**")
+    st.sidebar.caption(
+        "Fonte: IEA Global EV Outlook 2026"
+    )
+    st.sidebar.caption(
+        f"Modo ativo: {vehicle_option}"
+    )
 
-    @st.cache_data(show_spinner=f"Carregando dados IEA ({vehicle_mode_ui})...", ttl=300)
+
+    @st.cache_data(ttl=300)
     def get_data(mode):
         return load_and_process_data(mode)
 
-    df_processed = get_data(vehicle_key)
 
-    if df_processed is None or df_processed.empty:
-        st.error("Falha ao carregar dados.")
+    df_processed = get_data(vehicle_mode)
+
+
+    if df_processed.empty:
+        st.error(
+            "Nenhum dado carregado."
+        )
         return
 
-    module_name = pages[selection]
+
     try:
-        page_module = importlib.import_module(module_name)
-        if hasattr(page_module, "render"):
-            page_module.render(df_processed)
+        module = importlib.import_module(
+            pages[selection]
+        )
+
+        if hasattr(module, "render"):
+            module.render(df_processed)
+
         else:
-            st.error(f"Módulo {module_name} sem função 'render'.")
+            st.error(
+                "Página sem função render()."
+            )
+
     except Exception as e:
-        st.error(f"Erro ao carregar a página: {e}")
+
         import traceback
-        st.code(traceback.format_exc())
+
+        st.error(
+            f"Erro ao carregar página: {e}"
+        )
+
+        st.code(
+            traceback.format_exc()
+        )
 
 
 if __name__ == "__main__":
