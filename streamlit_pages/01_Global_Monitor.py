@@ -6,131 +6,111 @@ import plotly.express as px
 import plotly.graph_objects as go
 from analytics.global_ranking import GlobalRanking
 
-# Paleta consistente
-_PALETTE = px.colors.sequential.Plasma
-
-
-def _kpi(label, value, delta=None, delta_label=""):
-    delta_html = ""
-    if delta is not None:
-        cls = "delta-up" if delta >= 0 else "delta-down"
-        arrow = "▲" if delta >= 0 else "▼"
-        delta_html = f'<div class="metric-delta {cls}">{arrow} {abs(delta):.1f}% {delta_label}</div>'
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-label">{label}</div>
-        <div class="metric-value">{value}</div>
-        {delta_html}
-    </div>""", unsafe_allow_html=True)
-
 
 def render(df: pd.DataFrame):
+    dataset = df.attrs.get("dataset", "")
+    mode    = df.attrs.get("vehicle_mode", "")
     st.title("🌍 Global Monitor")
-    st.markdown("Panorama mundial da transição para veículos elétricos — IEA Global EV Outlook 2026")
+    st.caption(f"IEA Global EV Outlook | Dataset: {dataset} | Modo: {mode}")
     st.markdown("---")
 
     latest_year = int(df["year"].max())
     prev_year   = latest_year - 1
-    df_latest   = df[df["year"] == latest_year]
-    df_prev     = df[df["year"] == prev_year]
+    df_l = df[df["year"] == latest_year]
+    df_p = df[df["year"] == prev_year]
 
-    total_latest = df_latest["ev_sales"].sum()
-    total_prev   = df_prev["ev_sales"].sum()
-    yoy          = (total_latest - total_prev) / total_prev * 100 if total_prev > 0 else 0
-    n_countries  = df["country"].nunique()
-    top_country  = df_latest.groupby("country")["ev_sales"].sum().idxmax()
-    top_share_row = df_latest.nlargest(1, "ev_sales")
-    top_share    = top_share_row["ev_sales"].values[0] / total_latest * 100
+    total_l = df_l["ev_sales"].sum()
+    total_p = df_p["ev_sales"].sum() if not df_p.empty else 0
+    yoy     = (total_l - total_p) / total_p * 100 if total_p > 0 else 0
 
-    # KPIs
+    top_country = df_l.groupby("country")["ev_sales"].sum().idxmax()
+    top_share   = df_l.groupby("country")["ev_sales"].sum().max() / total_l * 100
+    avg_gr      = df_l["growth_rate"].median()
+
+    # ── KPIs nativos Streamlit ────────────────────────────────────────────
     c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        _kpi(f"Vendas EV em {latest_year}", f"{total_latest/1e6:.2f} M unidades", yoy, "vs ano anterior")
-    with c2:
-        _kpi("Países monitorados", str(n_countries))
-    with c3:
-        _kpi("Líder de mercado", top_country, top_share - 100, "% share")
-    with c4:
-        avg_gr = df_latest["growth_rate"].median()
-        _kpi("Crescimento mediano YoY", f"{avg_gr:.1f}%" if not np.isnan(avg_gr) else "N/A")
+    c1.metric(f"Vendas EV {latest_year}", f"{total_l/1e6:.2f}M", f"{yoy:+.1f}% YoY")
+    c2.metric("Países monitorados", str(df["country"].nunique()))
+    c3.metric("Líder", top_country, f"{top_share:.1f}% share")
+    c4.metric("Crescimento mediano YoY", f"{avg_gr:.1f}%" if not np.isnan(avg_gr) else "N/A")
 
     st.markdown("---")
 
-    # Mapa coroplético
-    st.subheader(f"🗺️ Vendas de EV por País — {latest_year}")
-    map_data = df_latest.groupby("country")["ev_sales"].sum().reset_index()
+    # ── Mapa coroplético ──────────────────────────────────────────────────
+    st.subheader(f"🗺️ EV Stock Share por País — {latest_year}")
+    # Usar stock share se disponível, senão vendas
+    if "ev_stock_share" in df_l.columns and df_l["ev_stock_share"].notna().any():
+        map_df   = df_l.groupby("country")["ev_stock_share"].mean().reset_index()
+        map_col  = "ev_stock_share"
+        map_lbl  = "Stock Share (%)"
+        map_note = "Métrica: EV Stock Share (% da frota total)"
+    else:
+        map_df  = df_l.groupby("country")["ev_sales"].sum().reset_index()
+        map_col = "ev_sales"
+        map_lbl = "Vendas EV"
+        map_note = "Métrica: Vendas EV (unidades)"
+    st.caption(map_note)
+
     fig_map = px.choropleth(
-        map_data,
-        locations="country",
+        map_df,
+        locations=map_df.columns[0],
         locationmode="country names",
-        color="ev_sales",
-        hover_name="country",
-        color_continuous_scale="Plasma",
-        labels={"ev_sales": "Vendas EV"},
+        color=map_col,
+        hover_name=map_df.columns[0],
+        color_continuous_scale="Viridis",
+        labels={map_col: map_lbl},
     )
     fig_map.update_layout(
-        paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
-        geo=dict(bgcolor="#0d1117", showframe=False, showcoastlines=True,
-                 coastlinecolor="#30363d", landcolor="#161b22", showocean=True,
-                 oceancolor="#0d1117"),
-        coloraxis_colorbar=dict(title="Vendas", tickfont=dict(color="#8b949e")),
-        margin=dict(l=0,r=0,t=0,b=0), height=420,
-        font=dict(color="#e6edf3")
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=420,
+        geo=dict(showframe=False, showcoastlines=True),
     )
     st.plotly_chart(fig_map, use_container_width=True)
 
     st.markdown("---")
-    col_left, col_right = st.columns(2)
 
-    # Série temporal agregada
-    with col_left:
+    col_l, col_r = st.columns(2)
+
+    # ── Evolução temporal ─────────────────────────────────────────────────
+    with col_l:
         st.subheader("📈 Evolução global de vendas")
         ts = df.groupby("year")["ev_sales"].sum().reset_index()
-        fig_ts = go.Figure()
-        fig_ts.add_trace(go.Bar(
-            x=ts["year"], y=ts["ev_sales"]/1e6,
-            marker_color="#388bfd", name="Vendas EV (M)"
-        ))
-        fig_ts.update_layout(
-            xaxis_title="Ano", yaxis_title="Milhões de unidades",
-            paper_bgcolor="#161b22", plot_bgcolor="#161b22",
-            font=dict(color="#e6edf3"), height=320,
-            margin=dict(l=0,r=0,t=10,b=0),
-            xaxis=dict(gridcolor="#21262d"), yaxis=dict(gridcolor="#21262d")
+        fig_ts = px.bar(
+            ts, x="year", y="ev_sales",
+            labels={"ev_sales": "Vendas EV", "year": "Ano"},
+            color_discrete_sequence=["#636EFA"],
         )
+        fig_ts.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=320, showlegend=False)
         st.plotly_chart(fig_ts, use_container_width=True)
 
-    # Top 10 países
-    with col_right:
+    # ── Top 10 países ─────────────────────────────────────────────────────
+    with col_r:
         st.subheader(f"🏆 Top 10 países — {latest_year}")
-        top10 = map_data.nlargest(10, "ev_sales").sort_values("ev_sales")
-        fig_bar = go.Figure(go.Bar(
-            x=top10["ev_sales"]/1e3, y=top10["country"],
-            orientation="h",
-            marker_color="#3fb950",
-            text=(top10["ev_sales"]/1e3).map(lambda v: f"{v:,.0f}k"),
-            textposition="outside"
-        ))
+        top10 = (
+            df_l.groupby("country")["ev_sales"].sum()
+            .nlargest(10)
+            .sort_values()
+            .reset_index()
+        )
+        fig_bar = px.bar(
+            top10, x="ev_sales", y="country", orientation="h",
+            labels={"ev_sales": "Vendas EV", "country": ""},
+            color="ev_sales", color_continuous_scale="Viridis",
+            text=top10["ev_sales"].map(lambda v: f"{v/1e3:,.0f}k"),
+        )
+        fig_bar.update_traces(textposition="outside")
         fig_bar.update_layout(
-            xaxis_title="Vendas (mil unidades)", yaxis_title="",
-            paper_bgcolor="#161b22", plot_bgcolor="#161b22",
-            font=dict(color="#e6edf3"), height=320,
-            margin=dict(l=0,r=0,t=10,b=0),
-            xaxis=dict(gridcolor="#21262d"), yaxis=dict(gridcolor="#21262d")
+            margin=dict(l=0, r=60, t=10, b=0), height=320,
+            showlegend=False, coloraxis_showscale=False,
         )
         st.plotly_chart(fig_bar, use_container_width=True)
 
     st.markdown("---")
-    st.subheader("📊 Ranking EVQTI — Top 10")
+
+    # ── EVQTI Top 10 ──────────────────────────────────────────────────────
+    st.subheader("📊 EVQTI — Top 10 (early-stage momentum)")
     try:
-        ranking = GlobalRanking(df)
-        rdf = ranking.compute_ranking()
-        rdf["evqti_score"] = rdf["evqti_score"].round(3)
-        st.dataframe(
-            rdf.head(10).reset_index(drop=True),
-            use_container_width=True,
-            hide_index=True
-        )
+        rdf = GlobalRanking(df).compute_ranking()
+        st.dataframe(rdf.head(10).reset_index(drop=True), use_container_width=True, hide_index=True)
     except Exception as e:
         st.warning(f"Ranking indisponível: {e}")
- 
