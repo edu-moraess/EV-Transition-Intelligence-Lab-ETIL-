@@ -1,26 +1,65 @@
 # analytics/scenario_engine.py
+"""
+Motor de cenários para simular impactos de mudanças em parâmetros (ex: política, infraestrutura).
+"""
 import pandas as pd
+import numpy as np
+from models.diffusion import BassDiffusion
+from models.forecasting import MonteCarloSimulator, BayesianGPForecast
+from typing import Dict, List
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
 class ScenarioEngine:
     """
-    Motor de cenários 'what-if' para EV.
+    Aplica cenários alternativos alterando parâmetros de difusão.
     """
 
-    def __init__(self, df: pd.DataFrame):
-        self.df = df
+    def __init__(self, df: pd.DataFrame, country: str):
+        self.df = df[df["country"] == country].sort_values("year").reset_index(drop=True)
+        self.country = country
 
-    def apply_growth_shock(self, country: str, shock: float) -> pd.DataFrame:
-        df_country = self.df[self.df["country"] == country].copy()
-        df_country["ev_sales_shocked"] = df_country["ev_sales"] * (1 + shock)
-        logger.info(f"Choque de crescimento {shock:.2f} aplicado em {country}.")
-        return df_country
+    def run_scenario(self, scenario_name: str, param_adjust: Dict[str, float]) -> pd.DataFrame:
+        """
+        Executa um cenário ajustando parâmetros do modelo Bass.
 
-    def infrastructure_boost(self, country: str, boost: float) -> pd.DataFrame:
-        df_country = self.df[self.df["country"] == country].copy()
-        if "ev_per_charger" in df_country:
-            df_country["ev_per_charger_boosted"] = df_country["ev_per_charger"] * (1 - boost)
-        logger.info(f"Boost de infraestrutura {boost:.2f} aplicado em {country}.")
-        return df_country
+        Args:
+            scenario_name (str): Nome descritivo.
+            param_adjust (dict): Ajustes a aplicar nos parâmetros (ex: {"p": 1.5} para aumentar inovação).
+
+        Returns:
+            pd.DataFrame: Previsões para horizonte de 10 anos.
+        """
+        t_hist = self.df.index.values
+        S_hist = self.df["ev_sales"].cumsum().values
+
+        # Ajusta Bass
+        bass = BassDiffusion()
+        M, p, q = bass.fit(t_hist, S_hist)
+
+        # Aplica ajustes
+        if "p" in param_adjust:
+            p = p * param_adjust["p"]
+        if "q" in param_adjust:
+            q = q * param_adjust["q"]
+        if "M" in param_adjust:
+            M = M * param_adjust["M"]
+
+        # Prevê futuro
+        horizon = 10
+        t_future = np.arange(len(t_hist), len(t_hist) + horizon)
+        S_future = bass.cumulative_adoption(t_future, M, p, q)
+
+        # Converte para vendas anuais (diferença)
+        sales_future = np.diff(S_future, prepend=S_hist[-1])
+
+        # Cria DataFrame
+        years = list(self.df["year"].values) + [self.df["year"].iloc[-1] + i + 1 for i in range(horizon)]
+        df_scenario = pd.DataFrame({
+            "year": years,
+            "scenario": scenario_name,
+            "ev_sales_cumulative": np.concatenate([S_hist, S_future]),
+            "ev_sales_annual": np.concatenate([self.df["ev_sales"].values, sales_future])
+        })
+        return df_scenario
