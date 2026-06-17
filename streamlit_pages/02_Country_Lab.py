@@ -1,56 +1,44 @@
 # streamlit_pages/02_Country_Lab.py
+"""
+Página: Country Lab - análise detalhada por país.
+"""
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-from ingestion.loader import DataLoader
-from preprocessing.cleaning import DataCleaner
-from preprocessing.transformation import DataTransformer
-from preprocessing.features import FeatureEngineer
+from analytics.country_analysis import CountryAnalyzer
+from visualization.charts import Charts
 
-st.title("🇨🇴 Country Lab")
+def render(df_processed):
+    st.title("🔬 Country Lab")
+    countries = sorted(df_processed["country"].unique())
+    selected = st.selectbox("Selecione um país", countries)
 
-# Carregar dados
-loader = DataLoader()
-try:
-    df = loader.load_from_csv("EV_Data_Explorer_2026_GEVO_clean.csv")
-except FileNotFoundError:
-    st.warning("Arquivo CSV não encontrado em data/raw/.")
-    st.stop()
+    if selected:
+        analyzer = CountryAnalyzer(df_processed, selected)
+        data = analyzer.get_data()
 
-# Limpeza e features
-cleaner = DataCleaner(df)
-df_clean = cleaner.clean()
+        st.subheader(f"📈 Dados históricos: {selected}")
+        st.line_chart(data.set_index("year")["ev_sales"])
 
-transformer = DataTransformer(df_clean)
-df_transformed = transformer.add_log_transform(["ev_sales", "total_sales"])
+        # Métricas
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Último ano", data["year"].max())
+        col2.metric("Vendas no último ano", f"{data['ev_sales'].iloc[-1]:,.0f}")
+        col3.metric("CAGR", f"{data['cagr'].iloc[-1]:.2f}%" if "cagr" in data else "N/A")
 
-engineer = FeatureEngineer(df_transformed)
-df_features = engineer.engineer()
+        # Modelos de difusão
+        st.subheader("Modelos de Difusão")
+        results = analyzer.fit_diffusion_models()
+        for model_name, res in results.items():
+            if res["fitted"]:
+                st.write(f"{model_name}: {res['params']}")
+            else:
+                st.warning(f"{model_name}: não convergiu.")
 
-# Seleção de país
-countries = sorted(df_features["country"].unique())
-selected_country = st.selectbox("Selecione um país:", countries)
-
-df_country = df_features[df_features["country"] == selected_country]
-
-# Mostrar dados
-st.subheader(f"Dados para {selected_country}")
-st.dataframe(df_country)
-
-# Métricas principais
-st.subheader("📊 Métricas principais")
-col1, col2, col3 = st.columns(3)
-col1.metric("Total EV Sales", f"{df_country['ev_sales'].sum():,.0f}")
-col2.metric("CAGR", f"{df_country['cagr'].iloc[0]:.2f}%")
-col3.metric("Penetração média", f"{df_country['penetration'].mean():.2f}%" if "penetration" in df_country else "N/A")
-
-# Gráfico de vendas EV
-st.subheader("📈 Evolução das vendas de EV")
-fig = px.line(df_country, x="year", y="ev_sales", markers=True, title=f"EV Sales - {selected_country}")
-st.plotly_chart(fig, use_container_width=True)
-
-# Gráfico de penetração
-if "penetration" in df_country:
-    st.subheader("⚡ Penetração de EV")
-    fig2 = px.line(df_country, x="year", y="penetration", markers=True, title=f"EV Penetration - {selected_country}")
-    st.plotly_chart(fig2, use_container_width=True)
+        # Regimes
+        st.subheader("Detecção de Regimes")
+        regimes = analyzer.detect_regimes()
+        if "error" in regimes:
+            st.error(regimes["error"])
+        else:
+            st.write("Estados (0=Emerging, 1=Expansion, 2=Acceleration, 3=Maturity):")
+            st.write(regimes["states"])
