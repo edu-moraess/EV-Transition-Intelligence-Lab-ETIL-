@@ -104,4 +104,4 @@ class HMMRegimeDetector:
         # Para uso real de transições, usar a página Regime Detection diretamente
         n = self.n_states
         trans = np.full((n, n), 1.0 / n)
-        return trans
+        return trans 
