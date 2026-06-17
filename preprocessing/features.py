@@ -37,7 +37,7 @@ class FeatureEngineer:
         """Calcula a penetração de EV: ev_sales / total_sales * 100."""
         if "total_sales" in self.df.columns and self.df["total_sales"].notna().any():
             self.df["penetration"] = (self.df["ev_sales"] / self.df["total_sales"]) * 100
-            self.df["penetration"].fillna(0, inplace=True)
+            self.df["penetration"] = self.df["penetration"].fillna(0)
         else:
             logger.warning("total_sales não disponível, penetração não calculada.")
 
