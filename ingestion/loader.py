@@ -209,4 +209,4 @@ class DataLoader:
         df = df.dropna(subset=["ev_sales"])
         df = df[df["ev_sales"] > 0].reset_index(drop=True)
 
-        return df
+        return df 
