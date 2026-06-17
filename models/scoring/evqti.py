@@ -62,4 +62,4 @@ class EVQTI:
             "evqti_score": self.country_scores.values
         }).sort_values("evqti_score", ascending=False)
         df_ranking["rank"] = range(1, len(df_ranking) + 1)
-        return df_ranking
+        return df_ranking 
