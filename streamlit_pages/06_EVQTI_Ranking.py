@@ -16,9 +16,6 @@ def render(df: pd.DataFrame):
     st.markdown("**EV Quant Transition Index** — Índice proprietário PCA + z-score + ponderação por entropia")
     st.markdown("---")
 
-    # =========================
-    # EVQTI CALC
-    # =========================
     with st.spinner("Calculando EVQTI..."):
         try:
             ranking = GlobalRanking(df)
@@ -29,12 +26,7 @@ def render(df: pd.DataFrame):
 
     rdf["evqti_score"] = rdf["evqti_score"].round(4)
 
-    n_show = st.slider(
-        "Países a exibir",
-        10,
-        len(rdf),
-        min(30, len(rdf))
-    )
+    n_show = st.slider("Países a exibir", 10, len(rdf), min(30, len(rdf)))
 
     # =========================
     # BAR CHART
@@ -43,6 +35,7 @@ def render(df: pd.DataFrame):
 
     colors = px.colors.sequential.Plasma
     n_col = len(colors)
+
     bar_colors = [
         colors[int(i / len(top_n) * (n_col - 1))]
         for i in range(len(top_n))
@@ -75,7 +68,7 @@ def render(df: pd.DataFrame):
     st.markdown("---")
 
     # =========================
-    # DATA PREP (FIXED)
+    # SCATTER DATA PREP
     # =========================
     st.subheader("🔍 EVQTI × CAGR × Vendas")
 
@@ -87,18 +80,17 @@ def render(df: pd.DataFrame):
         growth_rate=("growth_rate", "mean")
     ).reset_index()
 
-    # 🔥 merge mantendo TODOS países do ranking
     scatter_df = rdf.merge(df_meta, on="country", how="left")
 
     # =========================
-    # NA SAFE LAYER (CRITICAL FIX)
+    # SAFE NA HANDLING
     # =========================
     scatter_df["ev_sales"] = scatter_df["ev_sales"].fillna(0)
     scatter_df["cagr"] = scatter_df["cagr"].fillna(scatter_df["cagr"].median())
     scatter_df["growth_rate"] = scatter_df["growth_rate"].fillna(0)
 
     # =========================
-    # QUANT SCALING (ROBUST SIZE)
+    # QUANT SIZE TRANSFORM (FIX NA + SCALE)
     # =========================
     scatter_df["ev_sales_log"] = np.log1p(scatter_df["ev_sales"])
 
@@ -109,7 +101,7 @@ def render(df: pd.DataFrame):
         scatter_df,
         x="evqti_score",
         y="cagr",
-        size="ev_sales_log",
+        size="ev_sales_log",   # 🔥 FIX PRINCIPAL AQUI
         color="evqti_score",
         hover_name="country",
         color_continuous_scale="Plasma",
@@ -177,10 +169,10 @@ def render(df: pd.DataFrame):
 
 **Pipeline:**
 1. Média histórica por país
-2. Imputação por mediana
-3. Z-score normalization
-4. PCA (1º componente)
-5. Score final reorientado (maior = melhor transição)
+2. Imputação de valores faltantes
+3. Padronização Z-score
+4. PCA (primeiro componente)
+5. Score final reorientado
 
 **Fonte:** IEA Global EV Outlook 2026
         """)
