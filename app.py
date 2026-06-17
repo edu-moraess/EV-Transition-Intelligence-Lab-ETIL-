@@ -80,111 +80,73 @@ h1, h2, h3 {
 # Pipeline ETIL
 # ==========================================================
 
-def load_and_process_data(
-    vehicle_mode: str = "Cars"
-) -> pd.DataFrame:
-    """
-    Pipeline completo utilizando IEA GEVO 2026.
-    """
+def load_and_process_data(vehicle_mode: str = "Cars") -> pd.DataFrame:
 
     try:
-
         loader = DataLoader()
 
-        # Loader já filtra Cars / 2W / Total
-        df_raw = loader.load_from_csv(
-            vehicle_mode=vehicle_mode
-        )
+        df_raw = loader.load_from_csv(vehicle_mode=vehicle_mode)
 
         logger.info(
-            f"RAW: {len(df_raw)} linhas | "
-            f"{df_raw['country'].nunique()} países"
+            f"RAW: {len(df_raw)} linhas | {df_raw['country'].nunique()} países"
         )
 
     except Exception as e:
-
-        logger.exception(
-            f"Erro no DataLoader: {e}"
-        )
-
+        logger.exception(f"Erro no DataLoader: {e}")
         return pd.DataFrame()
 
-
     # ============================
-    # Limpeza
+    # Cleaning
     # ============================
 
-    df_clean = DataCleaner(
-        df_raw
-    ).clean()
-
+    df_clean = DataCleaner(df_raw).clean()
 
     logger.info(
-        f"CLEAN: {len(df_clean)} linhas | "
-        f"{df_clean['country'].nunique()} países"
+        f"CLEAN: {len(df_clean)} linhas | {df_clean['country'].nunique()} países"
     )
-
 
     # ============================
-    # Transformações
+    # Transformation
     # ============================
 
-    transformer = DataTransformer(
-        df_clean
-    )
+    transformer = DataTransformer(df_clean)
 
-    df_trans = transformer.add_log_transform(
-        ["ev_sales"]
-    )
-
+    df_trans = transformer.add_log_transform(["ev_sales"])
 
     logger.info(
-        f"TRANSFORM: {len(df_trans)} linhas | "
-        f"{df_trans['country'].nunique()} países"
+        f"TRANSFORM: {len(df_trans)} linhas | {df_trans['country'].nunique()} países"
     )
-
 
     # ============================
     # Feature Engineering
     # ============================
 
-    engineer = FeatureEngineer(
-        df_trans
-    )
+    engineer = FeatureEngineer(df_trans)
 
     df_final = engineer.engineer()
 
-
     logger.info(
-        f"FEATURES: {len(df_final)} linhas | "
-        f"{df_final['country'].nunique()} países"
+        f"FEATURES: {len(df_final)} linhas | {df_final['country'].nunique()} países"
     )
-    # Usa EV stock share como penetração oficial
+
+    # ============================
+    # Penetration fix
+    # ============================
+
     if "ev_stock_share" in df_final.columns:
 
         mask = (
             df_final["ev_stock_share"].notna()
-            &
-            (df_final["ev_stock_share"] > 0)
+            & (df_final["ev_stock_share"] > 0)
         )
 
-        df_final.loc[
-            mask,
-            "penetration"
-        ] = df_final.loc[
-            mask,
-            "ev_stock_share"
-        ]
-
-
-    logger.info(
-        "Pipeline ETIL concluído: "
-        f"{len(df_final)} linhas | "
-        f"{df_final['country'].nunique()} países"
-    )
-
+        df_final.loc[mask, "penetration"] = df_final.loc[mask, "ev_stock_share"]
 
     df_final.attrs["vehicle_mode"] = vehicle_mode
+
+    logger.info(
+        "Pipeline ETIL concluído"
+    )
 
     return df_final
 
@@ -195,23 +157,25 @@ def load_and_process_data(
 
 def main():
 
-    st.sidebar.markdown(
-        "## ⚡ ETIL v2.1"
-    )
+    # ===============================
+    # SIDEBAR HEADER (NOVO)
+    # ===============================
 
     st.sidebar.markdown(
-        "**EV Transition Intelligence Lab**"
+        """
+        # EV Quant Research Platform  
+        ### Global Transition Analytics  
+        ---
+        """,
+        unsafe_allow_html=True
     )
-
-    st.sidebar.markdown("---")
-
 
     # ===============================
-    # Seleção do tipo de veículo
+    # MODE SELECTION
     # ===============================
 
     vehicle_option = st.sidebar.selectbox(
-        "Tipo de Veículo",
+        "Modo de Análise",
         [
             "Cars (Passageiros)",
             "2 and 3 wheelers",
@@ -220,125 +184,96 @@ def main():
         index=0
     )
 
-
     vehicle_mode = {
         "Cars (Passageiros)": "Cars",
         "2 and 3 wheelers": "2 and 3 wheelers",
         "Total (Todos)": "Total"
     }[vehicle_option]
 
-
     # ===============================
-    # Navegação das páginas
+    # NAVIGATION
     # ===============================
 
     pages = {
-
-        "🌍 Global Monitor":
-        "streamlit_pages.01_Global_Monitor",
-
-        "🔬 Country Lab":
-        "streamlit_pages.02_Country_Lab",
-
-        "🧠 Diffusion Engine":
-        "streamlit_pages.03_Diffusion_Engine",
-
-        "🔄 Regime Detection":
-        "streamlit_pages.04_Regime_Detection",
-
-        "📊 Forecast Lab":
-        "streamlit_pages.05_Forecast_Lab",
-
-        "🏆 EVQTI Ranking":
-        "streamlit_pages.06_EVQTI_Ranking",
+        "🌍 Global Monitor": "streamlit_pages.01_Global_Monitor",
+        "🔬 Country Lab": "streamlit_pages.02_Country_Lab",
+        "🧠 Diffusion Engine": "streamlit_pages.03_Diffusion_Engine",
+        "🔄 Regime Detection": "streamlit_pages.04_Regime_Detection",
+        "📊 Forecast Lab": "streamlit_pages.05_Forecast_Lab",
+        "🏆 EVQTI Ranking": "streamlit_pages.06_EVQTI_Ranking",
     }
-
-
-    selection = st.sidebar.radio(
-        "Navegação",
-        list(pages.keys())
-    )
-
 
     st.sidebar.markdown("---")
 
-    st.sidebar.caption(
-        "Fonte: IEA Global EV Outlook 2026"
-    )
+    st.sidebar.markdown("### Navegação")
 
-    st.sidebar.caption(
-        f"Modo ativo: {vehicle_option}"
+    selection = st.sidebar.radio(
+        "",
+        list(pages.keys())
     )
-
 
     # ===============================
-    # Cache de dados
+    # INFO DINÂMICA
     # ===============================
 
-    @st.cache_data(
-        ttl=300,
-        show_spinner="Processando dados IEA..."
+    st.sidebar.markdown("---")
+
+    st.sidebar.markdown(
+        f"""
+        **Fonte:** IEA Global EV Outlook 2026  
+        **Modo ativo:** {vehicle_option}
+        """
     )
+
+    # ===============================
+    # ASSINATURA
+    # ===============================
+
+    st.sidebar.markdown("---")
+
+    st.sidebar.markdown(
+        """
+        **Eduardo Moraes**  
+        Quant Systems Dev | Data Scientist
+        """
+    )
+
+    # ===============================
+    # CACHE DATA
+    # ===============================
+
+    @st.cache_data(ttl=300, show_spinner="Processando dados IEA...")
     def get_data(mode):
-
         return load_and_process_data(mode)
-
 
     df_processed = get_data(vehicle_mode)
 
-
-    # ===============================
-    # Validação
-    # ===============================
-
     if df_processed.empty:
-
-        st.error(
-            "Nenhum dado foi carregado pelo pipeline."
-        )
-
+        st.error("Nenhum dado foi carregado pelo pipeline.")
         return
 
-
     # ===============================
-    # Carrega página selecionada
+    # LOAD PAGE
     # ===============================
 
     try:
-
-        module = importlib.import_module(
-            pages[selection]
-        )
-
+        module = importlib.import_module(pages[selection])
 
         if hasattr(module, "render"):
-
             module.render(df_processed)
-
         else:
-
-            st.error(
-                "Página selecionada não possui render()."
-            )
-
+            st.error("Página selecionada não possui render().")
 
     except Exception as e:
-
         import traceback
 
-        st.error(
-            f"Erro ao carregar página: {e}"
-        )
-
-        st.code(
-            traceback.format_exc()
-        )
+        st.error(f"Erro ao carregar página: {e}")
+        st.code(traceback.format_exc())
 
 
 # ==========================================================
-# Execução
+# EXEC
 # ==========================================================
 
 if __name__ == "__main__":
-
     main()
