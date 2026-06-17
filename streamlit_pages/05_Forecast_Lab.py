@@ -137,3 +137,4 @@ def render(df: pd.DataFrame):
             "P90": round(float(np.percentile(col_vals,90)),1),
         })
     st.dataframe(pd.DataFrame(pct_rows), use_container_width=True, hide_index=True)
+ 
