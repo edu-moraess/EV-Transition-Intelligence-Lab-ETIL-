@@ -1,22 +1,86 @@
 # utils/helpers.py
+"""
+Funções auxiliares gerais.
+"""
+import numpy as np
 import pandas as pd
+from typing import List, Optional, Union
+from sklearn.preprocessing import StandardScaler
 
-def normalize_series(series: pd.Series) -> pd.Series:
+def validate_columns(df: pd.DataFrame, required_cols: List[str]) -> bool:
     """
-    Normaliza uma série entre 0 e 1.
-    """
-    return (series - series.min()) / (series.max() - series.min() + 1e-6)
+    Verifica se todas as colunas obrigatórias estão presentes.
 
-def calculate_cagr(start_value: float, end_value: float, periods: int) -> float:
-    """
-    Calcula CAGR (Compound Annual Growth Rate).
-    """
-    if start_value <= 0 or end_value <= 0 or periods <= 0:
-        return 0.0
-    return ((end_value / start_value) ** (1 / periods) - 1) * 100
+    Args:
+        df (pd.DataFrame): DataFrame a ser validado.
+        required_cols (List[str]): Lista de colunas obrigatórias.
 
-def safe_divide(a: float, b: float) -> float:
+    Returns:
+        bool: True se todas existirem.
     """
-    Divisão segura para evitar ZeroDivisionError.
+    missing = set(required_cols) - set(df.columns)
+    if missing:
+        raise ValueError(f"Colunas obrigatórias ausentes: {missing}")
+    return True
+
+def standardize_series(series: pd.Series) -> pd.Series:
     """
-    return a / b if b != 0 else 0
+    Padroniza uma série (z-score).
+
+    Args:
+        series (pd.Series): Série de dados.
+
+    Returns:
+        pd.Series: Série padronizada.
+    """
+    return (series - series.mean()) / series.std() if series.std() != 0 else series
+
+def growth_rate(series: pd.Series) -> pd.Series:
+    """
+    Calcula a taxa de crescimento anual (percentual) de uma série.
+
+    Args:
+        series (pd.Series): Série temporal (ordenada).
+
+    Returns:
+        pd.Series: Taxa de crescimento ano a ano (em %).
+    """
+    return series.pct_change() * 100
+
+def cagr(series: pd.Series) -> float:
+    """
+    Calcula a Taxa de Crescimento Anual Composta (CAGR).
+
+    Args:
+        series (pd.Series): Série temporal (ordenada).
+
+    Returns:
+        float: CAGR em porcentagem.
+    """
+    if len(series) < 2:
+        return np.nan
+    n = len(series) - 1
+    return ( (series.iloc[-1] / series.iloc[0]) ** (1/n) - 1 ) * 100
+
+def rolling_momentum(series: pd.Series, window: int = 3) -> pd.Series:
+    """
+    Calcula o momentum como a diferença entre a média recente e a média anterior.
+
+    Args:
+        series (pd.Series): Série temporal.
+        window (int): Tamanho da janela.
+
+    Returns:
+        pd.Series: Momentum.
+    """
+    if len(series) < 2 * window:
+        return pd.Series(index=series.index, dtype=float)
+    recent = series.rolling(window).mean()
+    previous = series.shift(window).rolling(window).mean()
+    return (recent - previous) / previous.abs() * 100
+
+def sigmoid(x: np.ndarray, a: float = 1, b: float = 0) -> np.ndarray:
+    """
+    Função sigmoide para suavização.
+    """
+    return 1 / (1 + np.exp(-a * (x - b)))
