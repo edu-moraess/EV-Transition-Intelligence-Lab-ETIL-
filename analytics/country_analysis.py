@@ -1,28 +1,81 @@
 # analytics/country_analysis.py
+"""
+Análise detalhada de um país específico.
+"""
 import pandas as pd
+import numpy as np
+from typing import Dict, Any
+from models.diffusion import BassDiffusion, LogisticGrowth, GompertzModel
+from models.regimes import HMMRegimeDetector
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-class CountryAnalysis:
+class CountryAnalyzer:
     """
-    Análises específicas por país.
+    Realiza análise completa para um país: difusão, regimes, métricas.
     """
 
-    def __init__(self, df: pd.DataFrame):
-        self.df = df
+    def __init__(self, df: pd.DataFrame, country: str):
+        self.df = df[df["country"] == country].sort_values("year").reset_index(drop=True)
+        self.country = country
+        if self.df.empty:
+            raise ValueError(f"País {country} não encontrado.")
 
-    def summary(self, country: str) -> dict:
-        df_country = self.df[self.df["country"] == country]
-        summary = {
-            "total_ev_sales": df_country["ev_sales"].sum(),
-            "avg_cagr": df_country["cagr"].mean(),
-            "avg_penetration": df_country["penetration"].mean() if "penetration" in df_country else None,
-            "ev_per_capita": df_country["ev_per_capita"].mean() if "ev_per_capita" in df_country else None,
+    def get_data(self) -> pd.DataFrame:
+        """Retorna dados históricos do país."""
+        return self.df
+
+    def fit_diffusion_models(self) -> Dict[str, Any]:
+        """
+        Ajusta modelos de difusão e retorna parâmetros e previsões.
+        """
+        t = self.df.index.values  # anos a partir de 0
+        S = self.df["ev_sales"].cumsum().values
+
+        results = {}
+        models = {
+            "Bass": BassDiffusion(),
+            "Logistic": LogisticGrowth(),
+            "Gompertz": GompertzModel()
         }
-        logger.info(f"Resumo gerado para {country}.")
-        return summary
 
-    def top_years(self, country: str, n: int = 5) -> pd.DataFrame:
-        df_country = self.df[self.df["country"] == country]
-        return df_country.sort_values("ev_sales", ascending=False).head(n)
+        for name, model in models.items():
+            try:
+                model.fit(t, S)
+                results[name] = {
+                    "params": model.get_params(),
+                    "fitted": True
+                }
+            except Exception as e:
+                logger.warning(f"Falha no modelo {name} para {self.country}: {e}")
+                results[name] = {"fitted": False, "error": str(e)}
+        return results
+
+    def detect_regimes(self) -> Dict[str, Any]:
+        """
+        Detecta regimes usando HMM.
+        """
+        if len(self.df) < 5:
+            return {"error": "Dados insuficientes para HMM."}
+        # Usa features: penetration e growth_rate
+        features = []
+        if "penetration" in self.df.columns and self.df["penetration"].notna().any():
+            features.append(self.df["penetration"].fillna(0).values.reshape(-1, 1))
+        if "growth_rate" in self.df.columns and self.df["growth_rate"].notna().any():
+            features.append(self.df["growth_rate"].fillna(0).values.reshape(-1, 1))
+        if not features:
+            return {"error": "Features insuficientes."}
+        X = np.hstack(features)
+        hmm = HMMRegimeDetector(n_states=4)
+        try:
+            hmm.fit(X)
+            states, probs = hmm.predict_regime(X)
+            return {
+                "states": states.tolist(),
+                "probabilities": probs.tolist(),
+                "transition_matrix": hmm.get_transition_matrix().tolist()
+            }
+        except Exception as e:
+            logger.error(f"HMM falhou: {e}")
+            return {"error": str(e)}
