@@ -9,19 +9,40 @@ logger = setup_logger(__name__)
 class DataLoader:
     """
     Carregador oficial IEA Global EV Outlook.
-    Converte formato longo GEVO para formato ETIL.
+    Suporta múltiplos datasets (2025 / 2026).
+    Converte formato longo GEVO para ETIL.
     """
 
     def __init__(self):
         self.root = Path(__file__).parent.parent
 
-
+    # ==========================================================
+    # LOAD ENTRY POINT
+    # ==========================================================
     def load_from_csv(
         self,
-        filename: str = "EV_Data_Explorer_2026_GEVO_clean.csv",
-        vehicle_mode: str = "Cars"
+        filename: str = None,
+        vehicle_mode: str = "Cars",
+        dataset: str = "2026"
     ) -> pd.DataFrame:
 
+        # -----------------------------
+        # resolve filename por dataset
+        # -----------------------------
+        if filename is None:
+
+            if dataset == "2025":
+                filename = "EV_Data_Explorer_2025_GEVO_clean.csv"
+
+            elif dataset == "2026":
+                filename = "EV_Data_Explorer_2026_GEVO_clean.csv"
+
+            else:
+                raise ValueError(f"Dataset inválido: {dataset}")
+
+        # -----------------------------
+        # search paths
+        # -----------------------------
         paths = [
             self.root / "data" / "raw" / filename,
             self.root / filename,
@@ -38,20 +59,20 @@ class DataLoader:
 
         if df_raw is None:
             raise FileNotFoundError(
-                "Arquivo IEA 2026 não encontrado."
+                f"Arquivo não encontrado: {filename}"
             )
 
         logger.info(
-            f"IEA bruto: {len(df_raw)} linhas | "
+            f"IEA bruto ({dataset}): "
+            f"{len(df_raw)} linhas | "
             f"{df_raw['region_country'].nunique()} países/regiões"
         )
 
-        return self._transform_iea_gevo(
-            df_raw,
-            vehicle_mode
-        )
+        return self._transform_iea_gevo(df_raw, vehicle_mode)
 
-
+    # ==========================================================
+    # TRANSFORM
+    # ==========================================================
     def _transform_iea_gevo(
         self,
         df: pd.DataFrame,
@@ -62,171 +83,115 @@ class DataLoader:
         if "category" in df.columns:
             df = df[df["category"] == "Historical"].copy()
 
-
-        # Filtro por veículo
+        # filtro veículo
         if (
             vehicle_mode != "Total"
             and "mode" in df.columns
         ):
-            df = df[
-                df["mode"] == vehicle_mode
-            ].copy()
-
+            df = df[df["mode"] == vehicle_mode].copy()
 
         logger.info(
             f"Após filtros: {len(df)} linhas | "
             f"{df['region_country'].nunique()} países"
         )
 
-
-        # EV sales
+        # ==================================================
+        # EV SALES
+        # ==================================================
         ev_sales = (
             df[
                 (df["parameter"] == "EV sales")
                 &
                 (df["powertrain"] == "EV")
             ]
-            .groupby(
-                ["region_country", "year"]
-            )["value"]
+            .groupby(["region_country", "year"])["value"]
             .sum()
             .reset_index()
-            .rename(
-                columns={
-                    "region_country": "country",
-                    "value": "ev_sales"
-                }
-            )
+            .rename(columns={
+                "region_country": "country",
+                "value": "ev_sales"
+            })
         )
 
-
-        # Total de vendas (EV + ICEV)
+        # ==================================================
+        # TOTAL SALES
+        # ==================================================
         total_sales = (
             df[
                 (df["parameter"] == "EV sales")
                 &
-                (
-                    df["powertrain"]
-                    .isin(["EV", "ICEV"])
-                )
+                (df["powertrain"].isin(["EV", "ICEV"]))
             ]
-            .groupby(
-                ["region_country", "year"]
-            )["value"]
+            .groupby(["region_country", "year"])["value"]
             .sum()
             .reset_index()
-            .rename(
-                columns={
-                    "region_country": "country",
-                    "value": "total_sales"
-                }
-            )
+            .rename(columns={
+                "region_country": "country",
+                "value": "total_sales"
+            })
         )
 
-
-        # Pontos de recarga
+        # ==================================================
+        # CHARGING POINTS
+        # ==================================================
         charging = (
-            df[
-                df["parameter"]
-                == "EV charging points"
-            ]
-            .groupby(
-                ["region_country", "year"]
-            )["value"]
+            df[df["parameter"] == "EV charging points"]
+            .groupby(["region_country", "year"])["value"]
             .sum()
             .reset_index()
-            .rename(
-                columns={
-                    "region_country": "country",
-                    "value":
-                    "charging_points"
-                }
-            )
+            .rename(columns={
+                "region_country": "country",
+                "value": "charging_points"
+            })
         )
 
-
-        # Market share EV
+        # ==================================================
+        # MARKET SHARE
+        # ==================================================
         share = (
-            df[
-                df["parameter"]
-                == "EV stock share"
-            ]
-            .groupby(
-                ["region_country", "year"]
-            )["value"]
+            df[df["parameter"] == "EV stock share"]
+            .groupby(["region_country", "year"])["value"]
             .mean()
             .reset_index()
-            .rename(
-                columns={
-                    "region_country": "country",
-                    "value":
-                    "ev_stock_share"
-                }
-            )
+            .rename(columns={
+                "region_country": "country",
+                "value": "ev_stock_share"
+            })
         )
 
-
-        # Merge das variáveis
+        # ==================================================
+        # MERGE FINAL
+        # ==================================================
         result = (
             ev_sales
-            .merge(
-                total_sales,
-                on=["country", "year"],
-                how="left"
-            )
-            .merge(
-                charging,
-                on=["country", "year"],
-                how="left"
-            )
-            .merge(
-                share,
-                on=["country", "year"],
-                how="left"
-            )
+            .merge(total_sales, on=["country", "year"], how="left")
+            .merge(charging, on=["country", "year"], how="left")
+            .merge(share, on=["country", "year"], how="left")
         )
 
-
-        # Campos mantidos pelo pipeline ETIL
+        # ==================================================
+        # FILL AUX VARIABLES
+        # ==================================================
         result["population"] = np.nan
         result["gdp"] = np.nan
 
-
-        # Tipos
-        result["year"] = (
-            result["year"]
-            .astype(int)
-        )
+        result["year"] = result["year"].astype(int)
 
         result["ev_sales"] = pd.to_numeric(
             result["ev_sales"],
             errors="coerce"
         )
 
-
-        # Remove linhas inválidas
-        result = (
-            result
-            .dropna(subset=["ev_sales"])
-        )
-
-        result = (
-            result[
-                result["ev_sales"] > 0
-            ]
-            .reset_index(drop=True)
-        )
-
+        # remove inválidos
+        result = result.dropna(subset=["ev_sales"])
+        result = result[result["ev_sales"] > 0].reset_index(drop=True)
 
         logger.info(
-            "ETIL pronto: "
-            f"{len(result)} linhas | "
+            f"ETIL pronto: {len(result)} linhas | "
             f"{result['country'].nunique()} países"
         )
 
         return result
 
 
-__all__ = [
-    "DataLoader"
-]
+__all__ = ["DataLoader"]
