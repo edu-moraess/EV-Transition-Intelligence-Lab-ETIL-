@@ -138,3 +138,4 @@ def render(df: pd.DataFrame):
         st.plotly_chart(fig_cp, use_container_width=True)
     else:
         st.info("Nenhum ponto de mudança estrutural detectado.")
+ 
