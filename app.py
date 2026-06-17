@@ -1,22 +1,12 @@
-# app.py
-"""
-Aplicação principal Streamlit.
-"""
 import streamlit as st
 import pandas as pd
+import numpy as np
+import importlib
 from pathlib import Path
 from ingestion.loader import DataLoader
 from preprocessing.cleaning import DataCleaner
 from preprocessing.transformation import DataTransformer
 from preprocessing.features import FeatureEngineer
-from streamlit_pages import (
-    GlobalMonitor,
-    CountryLab,
-    DiffusionEngine,
-    RegimeDetection,
-    ForecastLab,
-    EVQTIRanking,
-)
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -24,34 +14,25 @@ logger = setup_logger(__name__)
 st.set_page_config(page_title="EV Transition Intelligence Lab", layout="wide")
 
 def load_and_process_data():
-    """
-    Carrega e processa os dados.
-    """
     loader = DataLoader()
-    # Tentar carregar CSV padrão
     try:
         df_raw = loader.load_from_csv("ev_data.csv")
     except FileNotFoundError:
-        # Se não encontrar, carrega um exemplo dummy para demonstração
         st.warning("Arquivo 'ev_data.csv' não encontrado. Usando dados de exemplo.")
         df_raw = generate_dummy_data()
 
-    # Limpeza
     cleaner = DataCleaner(df_raw)
     df_clean = cleaner.clean()
 
-    # Transformação (opcional)
     transformer = DataTransformer(df_clean)
     df_trans = transformer.add_log_transform(["ev_sales"])
 
-    # Feature engineering
     engineer = FeatureEngineer(df_trans)
     df_final = engineer.engineer()
-
     return df_final
 
 def generate_dummy_data():
-    """Gera dados sintéticos para demonstração."""
+    np.random.seed(42)
     countries = ["USA", "China", "Germany", "France", "UK", "Norway", "Japan", "India", "Brazil"]
     years = list(range(2015, 2026))
     data = []
@@ -71,16 +52,15 @@ def main():
     st.sidebar.title("EV Transition Intelligence Lab")
     st.sidebar.markdown("---")
     pages = {
-        "🌍 Global Monitor": GlobalMonitor,
-        "🔬 Country Lab": CountryLab,
-        "🧠 Diffusion Engine": DiffusionEngine,
-        "🔄 Regime Detection": RegimeDetection,
-        "📊 Forecast Lab": ForecastLab,
-        "🏆 EVQTI Ranking": EVQTIRanking,
+        "🌍 Global Monitor": "streamlit_pages.01_Global_Monitor",
+        "🔬 Country Lab": "streamlit_pages.02_Country_Lab",
+        "🧠 Diffusion Engine": "streamlit_pages.03_Diffusion_Engine",
+        "🔄 Regime Detection": "streamlit_pages.04_Regime_Detection",
+        "📊 Forecast Lab": "streamlit_pages.05_Forecast_Lab",
+        "🏆 EVQTI Ranking": "streamlit_pages.06_EVQTI_Ranking",
     }
     selection = st.sidebar.radio("Navegação", list(pages.keys()))
 
-    # Carrega dados (cache para performance)
     @st.cache_data
     def get_data():
         return load_and_process_data()
@@ -90,8 +70,17 @@ def main():
         st.error("Falha ao carregar dados.")
         return
 
-    # Renderiza página selecionada
-    pages[selection].render(df_processed)
+    module_name = pages[selection]
+    try:
+        page_module = importlib.import_module(module_name)
+        if hasattr(page_module, "render"):
+            page_module.render(df_processed)
+        else:
+            st.error(f"O módulo {module_name} não possui função 'render'.")
+    except Exception as e:
+        st.error(f"Erro ao carregar a página: {e}")
+        import traceback
+        st.code(traceback.format_exc())
 
 if __name__ == "__main__":
     main()
