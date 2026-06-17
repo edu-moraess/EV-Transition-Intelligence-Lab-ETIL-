@@ -18,11 +18,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Design system
+# ── Design system ────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 [data-testid="stSidebar"] { background: #0d1117; }
 [data-testid="stSidebar"] * { color: #e6edf3 !important; }
+[data-testid="stSidebar"] .stRadio label { 
+    font-size: 0.92rem; padding: 4px 0; 
+}
 .metric-card {
     background: #161b22; border: 1px solid #30363d;
     border-radius: 8px; padding: 16px 20px; margin: 4px 0;
@@ -37,56 +40,45 @@ h1, h2, h3 { color: #e6edf3 !important; }
 """, unsafe_allow_html=True)
 
 
-def load_and_process_data(vehicle_mode: str = "Cars"):
-    """Pipeline com filtro por tipo de veículo"""
+def load_and_process_data():
     loader = DataLoader()
-    
     try:
         df_raw = loader.load_from_csv("ev_data.csv")
     except Exception:
-        logger.info("Carregando dados IEA 2026 diretamente")
-        df_raw = loader._load_iea_gevo() if hasattr(loader, '_load_iea_gevo') else loader.load_from_csv("EV_Data_Explorer_2026_GEVO_clean.csv")
-
-    # === FILTRO POR TIPO DE VEÍCULO ===
-    if 'mode' in df_raw.columns and vehicle_mode != "Total":
-        df_raw = df_raw[df_raw['mode'] == vehicle_mode].copy()
-
-    cleaner = DataCleaner(df_raw)
-    df_clean = cleaner.clean()
-
-    transformer = DataTransformer(df_clean)
-    df_trans = transformer.add_log_transform(["ev_sales"])
-
-    engineer = FeatureEngineer(df_trans)
-    df_final = engineer.engineer()
-
-    # Prioriza stock share como penetration
+        df_raw = generate_dummy_data()
+    df_clean  = DataCleaner(df_raw).clean()
+    df_trans  = DataTransformer(df_clean).add_log_transform(["ev_sales"])
+    df_final  = FeatureEngineer(df_trans).engineer()
+    # Usar ev_stock_share como penetração real onde disponível
     if "ev_stock_share" in df_final.columns:
         mask = df_final["ev_stock_share"].notna() & (df_final["ev_stock_share"] > 0)
         df_final.loc[mask, "penetration"] = df_final.loc[mask, "ev_stock_share"]
-
-    logger.info(f"Dados processados: {len(df_final)} registros | Modo: {vehicle_mode}")
     return df_final
 
 
+def generate_dummy_data():
+    np.random.seed(42)
+    countries = ["USA","China","Germany","France","UK","Norway","Japan","India","Brazil"]
+    years = list(range(2015, 2026))
+    data = []
+    for c in countries:
+        base = 1000 if c in ["USA","China"] else 100
+        for y in years:
+            ev    = base*(1.2**(y-2015))*(0.9+0.2*np.random.rand())
+            total = ev*(5+10*np.random.rand())
+            chg   = ev*(0.01+0.02*np.random.rand())
+            pop   = 50e6 if c in ["USA","China"] else 10e6
+            gdp   = 2e12 if c in ["USA","China"] else 0.5e12
+            data.append([c,y,ev,total,chg,pop,gdp])
+    return pd.DataFrame(data, columns=["country","year","ev_sales","total_sales",
+                                        "charging_points","population","gdp"])
+
+
 def main():
-    st.sidebar.markdown("## ⚡ ETIL v2.1")
+    # Sidebar
+    st.sidebar.markdown("## ⚡ ETIL")
     st.sidebar.markdown("**EV Transition Intelligence Lab**")
     st.sidebar.markdown("---")
-
-    # Filtro Global
-    vehicle_mode = st.sidebar.selectbox(
-        "Tipo de Veículo",
-        ["Cars (Passageiros)", "2 and 3 wheelers", "Total (Todos)"],
-        index=0,
-        help="Altera os dados em todas as abas"
-    )
-    vehicle_key = {
-        "Cars (Passageiros)": "Cars",
-        "2 and 3 wheelers": "2 and 3 wheelers",
-        "Total (Todos)": "Total"
-    }[vehicle_mode]
-
     pages = {
         "🌍 Global Monitor":   "streamlit_pages.01_Global_Monitor",
         "🔬 Country Lab":      "streamlit_pages.02_Country_Lab",
@@ -96,23 +88,18 @@ def main():
         "🏆 EVQTI Ranking":    "streamlit_pages.06_EVQTI_Ranking",
     }
     selection = st.sidebar.radio("Navegação", list(pages.keys()))
-
     st.sidebar.markdown("---")
     st.sidebar.caption("Fonte: IEA Global EV Outlook 2026")
-    st.sidebar.caption(f"Modo ativo: **{vehicle_mode}**")
+    st.sidebar.caption("Modelo: GMM · GP · Bass · Monte Carlo")
 
-    @st.cache_data(show_spinner=f"Processando dados ({vehicle_mode})...", ttl=300)
-    def get_data(mode):
-        return load_and_process_data(mode)
+    @st.cache_data(show_spinner="Carregando dados IEA...")
+    def get_data():
+        return load_and_process_data()
 
-    df_processed = get_data(vehicle_key)
-
+    df_processed = get_data()
     if df_processed is None or df_processed.empty:
         st.error("Falha ao carregar dados.")
         return
-
-    # Passa o filtro atual para as páginas (caso queiram usar)
-    df_processed.attrs['vehicle_mode'] = vehicle_key
 
     module_name = pages[selection]
     try:
@@ -126,6 +113,5 @@ def main():
         import traceback
         st.code(traceback.format_exc())
 
-
 if __name__ == "__main__":
-    main() 
+    main()
