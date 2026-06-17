@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import importlib
 
-from ingestion.loader import DataLoader
+from ingestion.dataset_engine import DatasetEngine
 from preprocessing.cleaning import DataCleaner
 from preprocessing.transformation import DataTransformer
 from preprocessing.features import FeatureEngineer
@@ -13,11 +13,11 @@ logger = setup_logger(__name__)
 
 
 # ==========================================================
-# Configuração Streamlit
+# CONFIG STREAMLIT
 # ==========================================================
 
 st.set_page_config(
-    page_title="EV Transition Intelligence Lab",
+    page_title="EV Quant Research Platform",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -25,7 +25,7 @@ st.set_page_config(
 
 
 # ==========================================================
-# Design System
+# DESIGN SYSTEM
 # ==========================================================
 
 st.markdown("""
@@ -60,14 +60,6 @@ st.markdown("""
     font-weight: 700;
 }
 
-.delta-up {
-    color: #3fb950;
-}
-
-.delta-down {
-    color: #f85149;
-}
-
 h1, h2, h3 {
     color: #e6edf3 !important;
 }
@@ -77,60 +69,43 @@ h1, h2, h3 {
 
 
 # ==========================================================
-# Pipeline ETIL
+# PIPELINE ETIL
 # ==========================================================
 
-def load_and_process_data(vehicle_mode: str = "Cars") -> pd.DataFrame:
+def load_and_process_data(vehicle_mode: str, dataset_mode: str) -> pd.DataFrame:
 
     try:
-        loader = DataLoader()
-
-        df_raw = loader.load_from_csv(vehicle_mode=vehicle_mode)
+        engine = DatasetEngine(vehicle_mode)
+        df_raw = engine.load(dataset_mode)
 
         logger.info(
             f"RAW: {len(df_raw)} linhas | {df_raw['country'].nunique()} países"
         )
 
     except Exception as e:
-        logger.exception(f"Erro no DataLoader: {e}")
+        logger.exception(f"Erro DatasetEngine: {e}")
         return pd.DataFrame()
 
     # ============================
-    # Cleaning
+    # CLEANING
     # ============================
 
     df_clean = DataCleaner(df_raw).clean()
 
-    logger.info(
-        f"CLEAN: {len(df_clean)} linhas | {df_clean['country'].nunique()} países"
-    )
-
     # ============================
-    # Transformation
+    # TRANSFORMATION
     # ============================
 
-    transformer = DataTransformer(df_clean)
-
-    df_trans = transformer.add_log_transform(["ev_sales"])
-
-    logger.info(
-        f"TRANSFORM: {len(df_trans)} linhas | {df_trans['country'].nunique()} países"
-    )
+    df_trans = DataTransformer(df_clean).add_log_transform(["ev_sales"])
 
     # ============================
-    # Feature Engineering
+    # FEATURES
     # ============================
 
-    engineer = FeatureEngineer(df_trans)
-
-    df_final = engineer.engineer()
-
-    logger.info(
-        f"FEATURES: {len(df_final)} linhas | {df_final['country'].nunique()} países"
-    )
+    df_final = FeatureEngineer(df_trans).engineer()
 
     # ============================
-    # Penetration fix
+    # FIX PENETRATION
     # ============================
 
     if "ev_stock_share" in df_final.columns:
@@ -143,22 +118,19 @@ def load_and_process_data(vehicle_mode: str = "Cars") -> pd.DataFrame:
         df_final.loc[mask, "penetration"] = df_final.loc[mask, "ev_stock_share"]
 
     df_final.attrs["vehicle_mode"] = vehicle_mode
-
-    logger.info(
-        "Pipeline ETIL concluído"
-    )
+    df_final.attrs["dataset_mode"] = dataset_mode
 
     return df_final
 
 
 # ==========================================================
-# Aplicação principal
+# MAIN
 # ==========================================================
 
 def main():
 
     # ===============================
-    # SIDEBAR HEADER (NOVO)
+    # SIDEBAR HEADER
     # ===============================
 
     st.sidebar.markdown(
@@ -171,7 +143,7 @@ def main():
     )
 
     # ===============================
-    # MODE SELECTION
+    # MODE VEHICLE
     # ===============================
 
     vehicle_option = st.sidebar.selectbox(
@@ -191,6 +163,20 @@ def main():
     }[vehicle_option]
 
     # ===============================
+    # DATASET MODE (NOVO)
+    # ===============================
+
+    dataset_option = st.sidebar.selectbox(
+        "Dataset",
+        [
+            "2025",
+            "2026",
+            "Combined"
+        ],
+        index=2
+    )
+
+    # ===============================
     # NAVIGATION
     # ===============================
 
@@ -204,16 +190,12 @@ def main():
     }
 
     st.sidebar.markdown("---")
-
     st.sidebar.markdown("### Navegação")
 
-    selection = st.sidebar.radio(
-        "",
-        list(pages.keys())
-    )
+    selection = st.sidebar.radio("", list(pages.keys()))
 
     # ===============================
-    # INFO DINÂMICA
+    # INFO
     # ===============================
 
     st.sidebar.markdown("---")
@@ -221,12 +203,13 @@ def main():
     st.sidebar.markdown(
         f"""
         **Fonte:** IEA Global EV Outlook 2026  
-        **Modo ativo:** {vehicle_option}
+        **Modo:** {vehicle_option}  
+        **Dataset:** {dataset_option}
         """
     )
 
     # ===============================
-    # ASSINATURA
+    # SIGNATURE
     # ===============================
 
     st.sidebar.markdown("---")
@@ -239,14 +222,14 @@ def main():
     )
 
     # ===============================
-    # CACHE DATA
+    # CACHE
     # ===============================
 
     @st.cache_data(ttl=300, show_spinner="Processando dados IEA...")
-    def get_data(mode):
-        return load_and_process_data(mode)
+    def get_data(mode, dataset):
+        return load_and_process_data(mode, dataset)
 
-    df_processed = get_data(vehicle_mode)
+    df_processed = get_data(vehicle_mode, dataset_option)
 
     if df_processed.empty:
         st.error("Nenhum dado foi carregado pelo pipeline.")
@@ -262,11 +245,10 @@ def main():
         if hasattr(module, "render"):
             module.render(df_processed)
         else:
-            st.error("Página selecionada não possui render().")
+            st.error("Página não possui render().")
 
     except Exception as e:
         import traceback
-
         st.error(f"Erro ao carregar página: {e}")
         st.code(traceback.format_exc())
 
