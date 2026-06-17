@@ -1,41 +1,40 @@
 """
 EV Quant Transition Index (EVQTI)
 
-Índice proprietário combinando:
-- Seleção robusta de features
-- Imputação de valores ausentes
-- Padronização Z-score
+Índice quantitativo baseado em:
+- Seleção de métricas com cobertura adequada
+- Agregação histórica por país
+- Imputação robusta por mediana
 - PCA para extração do fator principal de transição EV
 """
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
-from .pca_score import PCAScore
 from typing import List, Optional
+
+from .pca_score import PCAScore
 from utils.logger import setup_logger
+
 
 logger = setup_logger(__name__)
 
 
 class EVQTI:
     """
-    Calcula o EV Quant Transition Index para cada país
-    com base em múltiplas métricas da transição para
-    veículos elétricos.
+    Calcula o EV Quant Transition Index para países.
     """
 
-    def __init__(self, features: List[str] = None):
+    def __init__(self, features: Optional[List[str]] = None):
+
         self.features = features or [
             "penetration",
             "growth_rate",
             "cagr",
             "momentum_3y",
             "ev_per_capita",
-            "ev_per_charger"
+            "ev_per_charger",
         ]
 
-        self.scaler = StandardScaler()
         self.pca_score = PCAScore()
 
         self.fitted = False
@@ -44,21 +43,22 @@ class EVQTI:
 
     def fit(self, df: pd.DataFrame) -> None:
         """
-        Ajusta o EVQTI usando os dados históricos.
+        Ajusta o EVQTI usando dados históricos.
         """
 
-        # Seleciona apenas métricas que possuem dados suficientes
+        # Seleciona apenas métricas que possuem dados mínimos
         available_features = [
-            feature for feature in self.features
+            feature
+            for feature in self.features
             if (
                 feature in df.columns
                 and df[feature].notna().mean() >= 0.10
             )
         ]
 
-        if len(available_features) == 0:
+        if not available_features:
             raise ValueError(
-                "Nenhuma feature válida disponível para calcular o EVQTI."
+                "Nenhuma métrica válida disponível para o EVQTI."
             )
 
         logger.info(
@@ -73,52 +73,51 @@ class EVQTI:
         )
 
         logger.info(
-            f"Países antes da limpeza: {len(X)}"
+            f"Países encontrados: {len(X)}"
         )
 
-        # Remove métricas com pouca cobertura entre países
+        # Remove métricas com baixa cobertura após agregação
         coverage = X.notna().mean()
 
-        valid_features = coverage[
-            coverage >= 0.30
-        ].index.tolist()
+        valid_features = (
+            coverage[coverage >= 0.30]
+            .index
+            .tolist()
+        )
 
         X = X[valid_features]
 
-        if X.shape[1] == 0:
+        if X.empty:
             raise ValueError(
-                "Nenhuma métrica possui cobertura suficiente após agregação."
+                "Nenhuma métrica possui cobertura suficiente."
             )
 
         self.used_features = valid_features
 
         logger.info(
-            f"Features finais EVQTI: {valid_features}"
+            f"Features finais do EVQTI: {valid_features}"
         )
 
-        # Imputação robusta pela mediana
-        missing_before = X.isna().sum().sum()
+        # Imputação por mediana para preservar países
+        missing_values = X.isna().sum().sum()
 
         X = X.fillna(
             X.median(numeric_only=True)
         )
 
         logger.info(
-            f"Valores ausentes imputados: {missing_before}"
+            f"Valores ausentes preenchidos: {missing_values}"
         )
-
-        # Padronização Z-score
-        X_scaled = self.scaler.fit_transform(X)
 
         logger.info(
-            f"Calculando PCA com {len(X)} países "
-            f"e {X.shape[1]} métricas."
+            f"Executando PCA com {len(X)} países e "
+            f"{X.shape[1]} variáveis."
         )
 
-        # PCA
-        self.pca_score.fit(X_scaled)
+        # PCA + Z-score é feito dentro do PCAScore
+        self.pca_score.fit(X)
 
-        scores = self.pca_score.transform(X_scaled)
+        scores = self.pca_score.transform(X)
 
         # Cria ranking
         self.country_scores = (
@@ -138,7 +137,7 @@ class EVQTI:
 
     def get_ranking(self) -> pd.DataFrame:
         """
-        Retorna ranking final dos países.
+        Retorna o ranking final do EVQTI.
         """
 
         if not self.fitted:
@@ -149,22 +148,22 @@ class EVQTI:
         ranking = (
             self.country_scores
             .reset_index()
-            .rename(
-                columns={
-                    "index": "country",
-                    "evqti_score": "evqti_score"
-                }
-            )
         )
 
-        ranking["rank"] = (
-            np.arange(len(ranking)) + 1
+        ranking.columns = [
+            "country",
+            "evqti_score",
+        ]
+
+        ranking["rank"] = np.arange(
+            1,
+            len(ranking) + 1
         )
 
         return ranking[
             [
                 "country",
                 "rank",
-                "evqti_score"
+                "evqti_score",
             ]
         ]
