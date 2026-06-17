@@ -210,3 +210,4 @@ class DataLoader:
         df = df[df["ev_sales"] > 0].reset_index(drop=True)
 
         return df
+ 
