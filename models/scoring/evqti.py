@@ -1,7 +1,13 @@
-# models/scoring/evqti.py
 """
-EV Quant Transition Index (EVQTI): índice proprietário combinando PCA, z-score e ponderação por entropia.
+EV Quant Transition Index (EVQTI)
+
+Índice proprietário combinando:
+- Seleção robusta de features
+- Imputação de valores ausentes
+- Padronização Z-score
+- PCA para extração do fator principal de transição EV
 """
+
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
@@ -11,9 +17,12 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+
 class EVQTI:
     """
-    Calcula o EVQTI para cada país com base em métricas quantitativas.
+    Calcula o EV Quant Transition Index para cada país
+    com base em múltiplas métricas da transição para
+    veículos elétricos.
     """
 
     def __init__(self, features: List[str] = None):
@@ -25,41 +34,137 @@ class EVQTI:
             "ev_per_capita",
             "ev_per_charger"
         ]
+
         self.scaler = StandardScaler()
         self.pca_score = PCAScore()
+
         self.fitted = False
         self.country_scores = None
+        self.used_features = None
 
     def fit(self, df: pd.DataFrame) -> None:
         """
-        Ajusta o índice a partir dos dados.
+        Ajusta o EVQTI usando os dados históricos.
         """
-        # Seleciona features
-        available = [f for f in self.features if f in df.columns and df[f].notna().any()]
-        if not available:
-            raise ValueError("Nenhuma feature disponível para EVQTI.")
-        logger.info(f"Features usadas: {available}")
 
-        X = df.groupby("country")[available].mean()  # média por país para estabilidade
-        # Padroniza
+        # Seleciona apenas métricas que possuem dados suficientes
+        available_features = [
+            feature for feature in self.features
+            if (
+                feature in df.columns
+                and df[feature].notna().mean() >= 0.10
+            )
+        ]
+
+        if len(available_features) == 0:
+            raise ValueError(
+                "Nenhuma feature válida disponível para calcular o EVQTI."
+            )
+
+        logger.info(
+            f"Features candidatas EVQTI: {available_features}"
+        )
+
+        # Média histórica por país
+        X = (
+            df
+            .groupby("country")[available_features]
+            .mean()
+        )
+
+        logger.info(
+            f"Países antes da limpeza: {len(X)}"
+        )
+
+        # Remove métricas com pouca cobertura entre países
+        coverage = X.notna().mean()
+
+        valid_features = coverage[
+            coverage >= 0.30
+        ].index.tolist()
+
+        X = X[valid_features]
+
+        if X.shape[1] == 0:
+            raise ValueError(
+                "Nenhuma métrica possui cobertura suficiente após agregação."
+            )
+
+        self.used_features = valid_features
+
+        logger.info(
+            f"Features finais EVQTI: {valid_features}"
+        )
+
+        # Imputação robusta pela mediana
+        missing_before = X.isna().sum().sum()
+
+        X = X.fillna(
+            X.median(numeric_only=True)
+        )
+
+        logger.info(
+            f"Valores ausentes imputados: {missing_before}"
+        )
+
+        # Padronização Z-score
         X_scaled = self.scaler.fit_transform(X)
+
+        logger.info(
+            f"Calculando PCA com {len(X)} países "
+            f"e {X.shape[1]} métricas."
+        )
+
         # PCA
-        self.pca_score.fit(X)
+        self.pca_score.fit(X_scaled)
+
+        scores = self.pca_score.transform(X_scaled)
+
+        # Cria ranking
+        self.country_scores = (
+            pd.Series(
+                scores,
+                index=X.index,
+                name="evqti_score"
+            )
+            .sort_values(ascending=False)
+        )
+
         self.fitted = True
-        # Calcula score para cada país
-        scores = self.pca_score.transform(X)
-        self.country_scores = pd.Series(scores, index=X.index).sort_values(ascending=False)
-        logger.info("EVQTI calculado.")
+
+        logger.info(
+            f"EVQTI concluído com {len(self.country_scores)} países."
+        )
 
     def get_ranking(self) -> pd.DataFrame:
         """
-        Retorna ranking dos países com seus scores EVQTI.
+        Retorna ranking final dos países.
         """
+
         if not self.fitted:
-            raise ValueError("EVQTI não ajustado.")
-        df_ranking = pd.DataFrame({
-            "country": self.country_scores.index,
-            "evqti_score": self.country_scores.values
-        }).sort_values("evqti_score", ascending=False)
-        df_ranking["rank"] = range(1, len(df_ranking) + 1)
-        return df_ranking
+            raise ValueError(
+                "EVQTI ainda não foi ajustado."
+            )
+
+        ranking = (
+            self.country_scores
+            .reset_index()
+            .rename(
+                columns={
+                    "index": "country",
+                    "evqti_score": "evqti_score"
+                }
+            )
+        )
+
+        ranking["rank"] = (
+            np.arange(len(ranking)) + 1
+        )
+
+        return ranking[
+            [
+                "country",
+                "rank",
+                "evqti_score"
+            ]
+        ]
