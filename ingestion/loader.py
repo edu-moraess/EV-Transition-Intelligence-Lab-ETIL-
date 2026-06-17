@@ -1,4 +1,3 @@
-
 # ingestion/loader.py
 """
 Módulo para carregamento de dados a partir de arquivos Excel/CSV.
