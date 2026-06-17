@@ -1,38 +1,37 @@
 # streamlit_pages/03_Diffusion_Engine.py
+"""
+Página: Diffusion Engine - ajuste e visualização de modelos.
+"""
 import streamlit as st
+import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-from ingestion.loader import DataLoader
-from preprocessing.cleaning import DataCleaner
 from models.diffusion import BassDiffusion, LogisticGrowth, GompertzModel
+from visualization.diffusion_plot import DiffusionPlot
 
-st.title("📈 Diffusion Engine")
+def render(df_processed):
+    st.title("🧠 Diffusion Engine")
+    countries = sorted(df_processed["country"].unique())
+    selected = st.selectbox("Selecione um país", countries)
 
-loader = DataLoader()
-df = loader.load_from_csv("EV_Data_Explorer_2026_GEVO_clean.csv")
-df = DataCleaner(df).clean()
+    if selected:
+        data = df_processed[df_processed["country"] == selected].sort_values("year")
+        t = np.arange(len(data))
+        S = data["ev_sales"].cumsum().values
 
-countries = sorted(df["country"].unique())
-selected_country = st.selectbox("Selecione um país:", countries)
+        # Ajusta modelos
+        models = {
+            "Bass": BassDiffusion(),
+            "Logistic": LogisticGrowth(),
+            "Gompertz": GompertzModel()
+        }
+        fitted_models = {}
+        for name, model in models.items():
+            try:
+                model.fit(t, S)
+                fitted_models[name] = model
+            except:
+                st.warning(f"{name} não convergiu para {selected}")
 
-df_country = df[df["country"] == selected_country].sort_values("year")
-t = np.arange(len(df_country))
-S = df_country["ev_sales"].cumsum().values
-
-# Ajustar modelos
-bass = BassDiffusion()
-bass.fit(t, S)
-logistic = LogisticGrowth()
-logistic.fit(t, S)
-gompertz = GompertzModel()
-gompertz.fit(t, S)
-
-# Previsões
-t_future = np.arange(len(df_country) + 10)
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df_country["year"], y=S, mode="markers", name="Dados"))
-fig.add_trace(go.Scatter(x=df_country["year"].iloc[0] + t_future, y=bass.predict(t_future), name="Bass"))
-fig.add_trace(go.Scatter(x=df_country["year"].iloc[0] + t_future, y=logistic.predict(t_future), name="Logístico"))
-fig.add_trace(go.Scatter(x=df_country["year"].iloc[0] + t_future, y=gompertz.predict(t_future), name="Gompertz"))
-
-st.plotly_chart(fig, use_container_width=True)
+        if fitted_models:
+            fig = DiffusionPlot.plot_models(t, S, fitted_models)
+            st.plotly_chart(fig, use_container_width=True)
