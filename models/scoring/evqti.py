@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from .pca_score import PCAScore
+from typing import List, Optional
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
