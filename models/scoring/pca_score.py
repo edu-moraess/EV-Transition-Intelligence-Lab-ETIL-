@@ -27,6 +27,7 @@ class PCAScore:
         """
         Ajusta PCA aos dados.
         """
+        X = X.fillna(X.median())
         X_scaled = self.scaler.fit_transform(X)
         self.pca = PCA(n_components=self.n_components or min(X.shape[1], 5))
         self.pca.fit(X_scaled)
@@ -40,6 +41,7 @@ class PCAScore:
         """
         if not self.fitted:
             raise ValueError("PCA não ajustado.")
+        X = X.fillna(X.median())
         X_scaled = self.scaler.transform(X)
         scores = self.pca.transform(X_scaled)
         # Usa o primeiro componente como score (se houver mais de um, pode combinar)
