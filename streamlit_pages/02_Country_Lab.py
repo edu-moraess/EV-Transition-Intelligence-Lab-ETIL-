@@ -162,3 +162,4 @@ def render(df: pd.DataFrame):
 
         regime_df = pd.DataFrame({"Ano": data["year"].values, "Regime": regime_names})
         st.dataframe(regime_df, use_container_width=True, hide_index=True)
+ 
