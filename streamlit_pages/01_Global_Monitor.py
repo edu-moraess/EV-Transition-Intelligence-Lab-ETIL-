@@ -1,36 +1,32 @@
 # streamlit_pages/01_Global_Monitor.py
+"""
+Página: Global Monitor - visão geral mundial.
+"""
 import streamlit as st
 import pandas as pd
-from ingestion.loader import DataLoader
-from preprocessing.cleaning import DataCleaner
-from preprocessing.transformation import DataTransformer
-from preprocessing.features import FeatureEngineer
+from visualization.world_map import WorldMap
+from analytics.global_ranking import GlobalRanking
 
-st.title("🌍 Global EV Monitor")
+def render(df_processed):
+    st.title("🌍 Global Monitor")
+    st.markdown("Panorama mundial da transição elétrica")
 
-# Carregar dados (exemplo: CSV na pasta data/raw)
-loader = DataLoader()
-try:
-    df = loader.load_from_csv("EV_Data_Explorer_2026_GEVO_clean.csv")
-except FileNotFoundError:
-    st.warning("Arquivo CSV não encontrado em data/raw/.")
-    st.stop()
+    # Métricas gerais
+    total_ev = df_processed["ev_sales"].sum()
+    total_countries = df_processed["country"].nunique()
+    latest_year = df_processed["year"].max()
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total de EVs (ano mais recente)", f"{total_ev:,.0f}")
+    col2.metric("Países analisados", total_countries)
+    col3.metric("Ano atual", latest_year)
 
-# Limpeza e features
-cleaner = DataCleaner(df)
-df_clean = cleaner.clean()
+    # Mapa
+    latest_data = df_processed[df_processed["year"] == latest_year].groupby("country")["ev_sales"].sum().reset_index()
+    fig_map = WorldMap.choropleth(latest_data, value_col="ev_sales", title=f"Vendas de EV em {latest_year}")
+    st.plotly_chart(fig_map, use_container_width=True)
 
-transformer = DataTransformer(df_clean)
-df_transformed = transformer.add_log_transform(["ev_sales", "total_sales"])
-
-engineer = FeatureEngineer(df_transformed)
-df_features = engineer.engineer()
-
-# Mostrar dados
-st.subheader("Dados tratados")
-st.dataframe(df_features.head(20))
-
-# Estatísticas globais
-st.subheader("Estatísticas globais")
-st.metric("Total EV Sales", f"{df_features['ev_sales'].sum():,.0f}")
-st.metric("Média CAGR", f"{df_features['cagr'].mean():.2f}%")
+    # Ranking
+    ranking = GlobalRanking(df_processed)
+    ranking_df = ranking.compute_ranking()
+    st.subheader("🏆 Ranking EVQTI")
+    st.dataframe(ranking_df.head(10))
