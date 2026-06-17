@@ -30,6 +30,7 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+
 [data-testid="stSidebar"] {
     background: #0d1117;
 }
@@ -70,61 +71,95 @@ st.markdown("""
 h1, h2, h3 {
     color: #e6edf3 !important;
 }
+
 </style>
 """, unsafe_allow_html=True)
 
 
 # ==========================================================
-# Pipeline de dados
+# Pipeline ETIL
 # ==========================================================
 
-def load_and_process_data(vehicle_mode: str = "Cars") -> pd.DataFrame:
+def load_and_process_data(
+    vehicle_mode: str = "Cars"
+) -> pd.DataFrame:
     """
-    Pipeline ETIL usando IEA GEVO 2026.
+    Pipeline completo utilizando IEA GEVO 2026.
     """
 
     try:
+
         loader = DataLoader()
 
-        # O DataLoader tenta ev_data.csv e,
-        # como ele foi removido, usa IEA 2026 automaticamente.
-        df_raw = loader.load_from_csv("ev_data.csv")
+        # Loader já filtra Cars / 2W / Total
+        df_raw = loader.load_from_csv(
+            vehicle_mode=vehicle_mode
+        )
 
         logger.info(
-            f"Dados carregados: {len(df_raw)} registros"
+            f"RAW: {len(df_raw)} linhas | "
+            f"{df_raw['country'].nunique()} países"
         )
 
     except Exception as e:
-        logger.error(f"Erro ao carregar dados: {e}")
+
+        logger.exception(
+            f"Erro no DataLoader: {e}"
+        )
+
         return pd.DataFrame()
 
 
-    # Filtro de veículo
-    if "mode" in df_raw.columns and vehicle_mode != "Total":
-        df_raw = (
-            df_raw[df_raw["mode"] == vehicle_mode]
-            .copy()
-        )
-
-
+    # ============================
     # Limpeza
-    cleaner = DataCleaner(df_raw)
-    df_clean = cleaner.clean()
+    # ============================
+
+    df_clean = DataCleaner(
+        df_raw
+    ).clean()
 
 
+    logger.info(
+        f"CLEAN: {len(df_clean)} linhas | "
+        f"{df_clean['country'].nunique()} países"
+    )
+
+
+    # ============================
     # Transformações
-    transformer = DataTransformer(df_clean)
+    # ============================
+
+    transformer = DataTransformer(
+        df_clean
+    )
+
     df_trans = transformer.add_log_transform(
         ["ev_sales"]
     )
 
 
-    # Engenharia de features
-    engineer = FeatureEngineer(df_trans)
+    logger.info(
+        f"TRANSFORM: {len(df_trans)} linhas | "
+        f"{df_trans['country'].nunique()} países"
+    )
+
+
+    # ============================
+    # Feature Engineering
+    # ============================
+
+    engineer = FeatureEngineer(
+        df_trans
+    )
+
     df_final = engineer.engineer()
 
 
-    # Usa o EV stock share como penetração principal
+    logger.info(
+        f"FEATURES: {len(df_final)} linhas | "
+        f"{df_final['country'].nunique()} países"
+    )
+    # Usa EV stock share como penetração oficial
     if "ev_stock_share" in df_final.columns:
 
         mask = (
@@ -143,7 +178,9 @@ def load_and_process_data(vehicle_mode: str = "Cars") -> pd.DataFrame:
 
 
     logger.info(
-        f"Pipeline concluído: {len(df_final)} registros finais."
+        "Pipeline ETIL concluído: "
+        f"{len(df_final)} linhas | "
+        f"{df_final['country'].nunique()} países"
     )
 
 
@@ -158,12 +195,20 @@ def load_and_process_data(vehicle_mode: str = "Cars") -> pd.DataFrame:
 
 def main():
 
-    st.sidebar.markdown("## ⚡ ETIL v2.1")
+    st.sidebar.markdown(
+        "## ⚡ ETIL v2.1"
+    )
+
     st.sidebar.markdown(
         "**EV Transition Intelligence Lab**"
     )
+
     st.sidebar.markdown("---")
 
+
+    # ===============================
+    # Seleção do tipo de veículo
+    # ===============================
 
     vehicle_option = st.sidebar.selectbox(
         "Tipo de Veículo",
@@ -183,24 +228,29 @@ def main():
     }[vehicle_option]
 
 
+    # ===============================
+    # Navegação das páginas
+    # ===============================
+
     pages = {
+
         "🌍 Global Monitor":
-            "streamlit_pages.01_Global_Monitor",
+        "streamlit_pages.01_Global_Monitor",
 
         "🔬 Country Lab":
-            "streamlit_pages.02_Country_Lab",
+        "streamlit_pages.02_Country_Lab",
 
         "🧠 Diffusion Engine":
-            "streamlit_pages.03_Diffusion_Engine",
+        "streamlit_pages.03_Diffusion_Engine",
 
         "🔄 Regime Detection":
-            "streamlit_pages.04_Regime_Detection",
+        "streamlit_pages.04_Regime_Detection",
 
         "📊 Forecast Lab":
-            "streamlit_pages.05_Forecast_Lab",
+        "streamlit_pages.05_Forecast_Lab",
 
         "🏆 EVQTI Ranking":
-            "streamlit_pages.06_EVQTI_Ranking",
+        "streamlit_pages.06_EVQTI_Ranking",
     }
 
 
@@ -211,41 +261,66 @@ def main():
 
 
     st.sidebar.markdown("---")
+
     st.sidebar.caption(
         "Fonte: IEA Global EV Outlook 2026"
     )
+
     st.sidebar.caption(
         f"Modo ativo: {vehicle_option}"
     )
 
 
-    @st.cache_data(ttl=300)
+    # ===============================
+    # Cache de dados
+    # ===============================
+
+    @st.cache_data(
+        ttl=300,
+        show_spinner="Processando dados IEA..."
+    )
     def get_data(mode):
+
         return load_and_process_data(mode)
 
 
     df_processed = get_data(vehicle_mode)
 
 
+    # ===============================
+    # Validação
+    # ===============================
+
     if df_processed.empty:
+
         st.error(
-            "Nenhum dado carregado."
+            "Nenhum dado foi carregado pelo pipeline."
         )
+
         return
 
 
+    # ===============================
+    # Carrega página selecionada
+    # ===============================
+
     try:
+
         module = importlib.import_module(
             pages[selection]
         )
 
+
         if hasattr(module, "render"):
+
             module.render(df_processed)
 
         else:
+
             st.error(
-                "Página sem função render()."
+                "Página selecionada não possui render()."
             )
+
 
     except Exception as e:
 
@@ -260,5 +335,10 @@ def main():
         )
 
 
+# ==========================================================
+# Execução
+# ==========================================================
+
 if __name__ == "__main__":
+
     main()
