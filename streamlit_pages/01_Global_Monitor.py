@@ -133,3 +133,4 @@ def render(df: pd.DataFrame):
         )
     except Exception as e:
         st.warning(f"Ranking indisponível: {e}")
+ 
