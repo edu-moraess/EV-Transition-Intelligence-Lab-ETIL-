@@ -1,7 +1,3 @@
-# analytics/__init__.py
-# Lazy imports: cada classe é importada apenas quando necessária,
-# evitando falhas em cascata caso algum módulo de modelo esteja indisponível.
-
 def __getattr__(name):
     if name == "CountryAnalyzer":
         from .country_analysis import CountryAnalyzer
