@@ -10,7 +10,7 @@ class DataLoader:
     """
     Carregador oficial IEA Global EV Outlook.
     Suporta múltiplos datasets (2025 / 2026).
-    Converte formato longo GEVO para ETIL.
+    Versão robusta com fallback de vehicle_mode.
     """
 
     def __init__(self):
@@ -27,7 +27,7 @@ class DataLoader:
     ) -> pd.DataFrame:
 
         # -----------------------------
-        # resolve filename por dataset
+        # dataset selector
         # -----------------------------
         if filename is None:
 
@@ -41,7 +41,7 @@ class DataLoader:
                 raise ValueError(f"Dataset inválido: {dataset}")
 
         # -----------------------------
-        # search paths
+        # file search
         # -----------------------------
         paths = [
             self.root / "data" / "raw" / filename,
@@ -58,14 +58,12 @@ class DataLoader:
                 break
 
         if df_raw is None:
-            raise FileNotFoundError(
-                f"Arquivo não encontrado: {filename}"
-            )
+            raise FileNotFoundError(f"Arquivo não encontrado: {filename}")
 
         logger.info(
             f"IEA bruto ({dataset}): "
             f"{len(df_raw)} linhas | "
-            f"{df_raw['region_country'].nunique()} países/regiões"
+            f"{df_raw['region_country'].nunique()} países"
         )
 
         return self._transform_iea_gevo(df_raw, vehicle_mode)
@@ -79,25 +77,44 @@ class DataLoader:
         vehicle_mode: str
     ) -> pd.DataFrame:
 
-        # Apenas histórico
+        # -----------------------------
+        # Historical filter
+        # -----------------------------
         if "category" in df.columns:
             df = df[df["category"] == "Historical"].copy()
 
-        # filtro veículo
-        if (
-            vehicle_mode != "Total"
-            and "mode" in df.columns
-        ):
-            df = df[df["mode"] == vehicle_mode].copy()
+        # -----------------------------
+        # SAFE VEHICLE FILTER (FIX CRÍTICO)
+        # -----------------------------
+        if vehicle_mode != "Total" and "mode" in df.columns:
+
+            unique_modes = df["mode"].dropna().unique()
+            logger.info(f"[MODE DEBUG] disponíveis: {unique_modes}")
+
+            # fallback inteligente
+            df["mode_str"] = df["mode"].astype(str)
+
+            if vehicle_mode == "Cars":
+                df = df[
+                    df["mode_str"].str.contains("Car|Passenger|LDV", na=False)
+                ].copy()
+
+            elif vehicle_mode == "2 and 3 wheelers":
+                df = df[
+                    df["mode_str"].str.contains("2|3|Motorcycle|Two", na=False)
+                ].copy()
+
+            else:
+                df = df.copy()
 
         logger.info(
             f"Após filtros: {len(df)} linhas | "
             f"{df['region_country'].nunique()} países"
         )
 
-        # ==================================================
+        # ============================
         # EV SALES
-        # ==================================================
+        # ============================
         ev_sales = (
             df[
                 (df["parameter"] == "EV sales")
@@ -113,9 +130,9 @@ class DataLoader:
             })
         )
 
-        # ==================================================
+        # ============================
         # TOTAL SALES
-        # ==================================================
+        # ============================
         total_sales = (
             df[
                 (df["parameter"] == "EV sales")
@@ -131,9 +148,9 @@ class DataLoader:
             })
         )
 
-        # ==================================================
+        # ============================
         # CHARGING POINTS
-        # ==================================================
+        # ============================
         charging = (
             df[df["parameter"] == "EV charging points"]
             .groupby(["region_country", "year"])["value"]
@@ -145,9 +162,9 @@ class DataLoader:
             })
         )
 
-        # ==================================================
+        # ============================
         # MARKET SHARE
-        # ==================================================
+        # ============================
         share = (
             df[df["parameter"] == "EV stock share"]
             .groupby(["region_country", "year"])["value"]
@@ -159,9 +176,9 @@ class DataLoader:
             })
         )
 
-        # ==================================================
+        # ============================
         # MERGE FINAL
-        # ==================================================
+        # ============================
         result = (
             ev_sales
             .merge(total_sales, on=["country", "year"], how="left")
@@ -169,9 +186,9 @@ class DataLoader:
             .merge(share, on=["country", "year"], how="left")
         )
 
-        # ==================================================
-        # FILL AUX VARIABLES
-        # ==================================================
+        # ============================
+        # SAFE NUMERICS
+        # ============================
         result["population"] = np.nan
         result["gdp"] = np.nan
 
