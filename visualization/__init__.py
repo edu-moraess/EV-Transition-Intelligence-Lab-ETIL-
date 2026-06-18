@@ -1,6 +1,8 @@
-# visualization/__init__.py
-from .charts import Charts
-from .diffusion_plot import DiffusionPlot
-from .regime_dashboard import RegimeDashboard
-from .forecast_dashboard import ForecastDashboard
-from .world_map import WorldMap
+def __getattr__(name):
+    if name == "Charts":
+        from .charts import Charts
+        return Charts
+    if name == "WorldMap":
+        from .world_map import WorldMap
+        return WorldMap
+    raise AttributeError(f"module 'visualization' has no attribute {name!r}")
