@@ -105,3 +105,4 @@ class HMMRegimeDetector:
         n = self.n_states
         trans = np.full((n, n), 1.0 / n)
         return trans
+ 
