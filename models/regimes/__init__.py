@@ -6,3 +6,4 @@ def __getattr__(name):
         from .changepoint import BayesianChangePoint
         return BayesianChangePoint
     raise AttributeError(f"module 'models.regimes' has no attribute {name!r}")
+ 
