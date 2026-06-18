@@ -61,33 +61,45 @@ SEQ_MAP = [
 # ── Layout Plotly base ────────────────────────────────────────────────────
 
 def base_layout(height: int = 340, title: str = "") -> dict:
-    """Layout Plotly mínimo e limpo — sem fundo fixo."""
+    """
+    Layout Plotly mínimo — compatível com light e dark mode do Streamlit.
+
+    - Nenhuma cor de texto fixa: herdada automaticamente do tema Streamlit
+    - Fundo transparente: Streamlit controla o background da página
+    - Legend com fundo transparente: sem bgcolor branco que oculta no dark mode
+    - Gridlines em rgba neutro: visível em ambos os modos
+    """
     return dict(
-        title=dict(text=title, font=dict(size=13, color=SLATE), x=0),
+        title=dict(text=title, font=dict(size=13), x=0),
         height=height,
         margin=dict(l=0, r=8, t=36 if title else 8, b=0),
-        font=dict(family="Inter, Arial, sans-serif", size=11, color=SLATE),
+        font=dict(family="Inter, Arial, sans-serif", size=11),
         xaxis=dict(
-            gridcolor=BORDER, gridwidth=0.5,
-            linecolor=BORDER, zerolinecolor=BORDER,
+            gridcolor="rgba(128,128,128,0.15)",
+            gridwidth=0.5,
+            linecolor="rgba(128,128,128,0.2)",
+            zerolinecolor="rgba(128,128,128,0.2)",
             tickfont=dict(size=10),
         ),
         yaxis=dict(
-            gridcolor=BORDER, gridwidth=0.5,
-            linecolor=BORDER, zerolinecolor=BORDER,
+            gridcolor="rgba(128,128,128,0.15)",
+            gridwidth=0.5,
+            linecolor="rgba(128,128,128,0.2)",
+            zerolinecolor="rgba(128,128,128,0.2)",
             tickfont=dict(size=10),
         ),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         showlegend=True,
         legend=dict(
-            bgcolor="rgba(255,255,255,0.9)",
-            bordercolor=BORDER, borderwidth=1,
+            bgcolor="rgba(0,0,0,0)",
+            bordercolor="rgba(128,128,128,0.25)",
+            borderwidth=1,
             font=dict(size=10),
         ),
         hoverlabel=dict(
-            bgcolor=WHITE, bordercolor=BORDER,
-            font=dict(size=11, color=SLATE),
+            bordercolor="rgba(128,128,128,0.3)",
+            font=dict(size=11),
         ),
     )
 
