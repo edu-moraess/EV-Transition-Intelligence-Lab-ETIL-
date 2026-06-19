@@ -11,8 +11,13 @@ _SCENARIO_FACTOR = {"base": 1.0,  "optimistic": 1.25,      "pessimistic": 0.75}
 
 
 def render(df: pd.DataFrame):
-    st.title("Forecast Lab")
-    st.caption("Bayesian Gaussian Process Regression + Monte Carlo simulation · 2,000 paths")
+    st.markdown("## Forecast Lab")
+    st.markdown(
+        "Point forecasts are misleading. Instead, we use a **Bayesian Gaussian Process** to model "
+        "the trend with uncertainty, then run **2,000 Monte Carlo simulations** to produce "
+        "a full probability distribution of possible futures. "
+        "The result is not a single number — it's a range, with honest confidence intervals."
+    )
     st.markdown("---")
 
     countries = sorted(df["country"].unique())
