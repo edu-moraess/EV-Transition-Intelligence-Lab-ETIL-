@@ -53,6 +53,50 @@ def render(df: pd.DataFrame):
     st.caption(f"Source: IEA Global EV Outlook · Dataset: {dataset} · Vehicle mode: {mode}")
     st.markdown("---")
 
+    # ── CSS para modebar transparente ──────────────────────────────────────
+    st.markdown("""
+    <style>
+    /* Barra de ferramentas do Plotly - totalmente transparente */
+    .modebar {
+        background-color: transparent !important;
+        box-shadow: none !important;
+        border-radius: 8px !important;
+        padding: 4px 8px !important;
+    }
+    /* Ícones com a cor primária do tema */
+    .modebar .icon {
+        fill: #1f3a6e !important;
+        opacity: 0.7 !important;
+        transition: opacity 0.2s !important;
+    }
+    .modebar .icon:hover {
+        fill: #0d1117 !important;
+        opacity: 1 !important;
+    }
+    /* Fundo do botão no hover - sutil */
+    .modebar-btn:hover {
+        background-color: rgba(31, 58, 110, 0.08) !important;
+        border-radius: 4px !important;
+    }
+    /* Remove o fundo do grupo de botões (se houver) */
+    .modebar-group {
+        background-color: transparent !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Configuração padrão para os gráficos ──────────────────────────────
+    PLOTLY_CONFIG = {
+        'displayModeBar': True,        # mantém a barra visível
+        'displaylogo': False,          # remove o logo Plotly
+        'modeBarButtonsToRemove': [    # remove botões desnecessários
+            'zoom2d', 'pan2d', 'select2d', 'lasso2d',
+            'zoomIn2d', 'zoomOut2d', 'autoScale2d',
+            'resetScale2d', 'toImage', 'sendDataToCloud'
+        ],
+        'responsive': True,
+    }
+
     # ── Data prep ────────────────────────────────────────────────────────────
     latest = int(df["year"].max())
     prev   = latest - 1
@@ -128,9 +172,7 @@ def render(df: pd.DataFrame):
         hovertemplate="Year %{x}: %{y:.1f}% YoY<extra></extra>",
     ))
 
-    # ---- CORREÇÃO AQUI: combinar layouts sem duplicar 'yaxis' ----
-    layout_base = base_layout(360)  # dicionário base
-    # Atualiza/substitui as chaves desejadas
+    layout_base = base_layout(360)
     layout_base.update({
         "yaxis": dict(
             title="Million units",
@@ -156,9 +198,8 @@ def render(df: pd.DataFrame):
         "barmode": "overlay",
     })
     fig_ts.update_layout(**layout_base)
-    # ---- FIM CORREÇÃO ----
 
-    st.plotly_chart(fig_ts, use_container_width=True)
+    st.plotly_chart(fig_ts, use_container_width=True, config=PLOTLY_CONFIG)
 
     st.markdown("---")
 
@@ -191,7 +232,7 @@ def render(df: pd.DataFrame):
             "margin": {**lay_r.get("margin",{}), "r": 70}
         })
         fig_reg.update_layout(**lay_r)
-        st.plotly_chart(fig_reg, use_container_width=True)
+        st.plotly_chart(fig_reg, use_container_width=True, config=PLOTLY_CONFIG)
 
     with col_r:
         st.markdown(f"### Top 10 fastest-growing markets")
@@ -220,7 +261,7 @@ def render(df: pd.DataFrame):
             "margin": {**lay_g.get("margin",{}), "r": 70}
         })
         fig_gr.update_layout(**lay_g)
-        st.plotly_chart(fig_gr, use_container_width=True)
+        st.plotly_chart(fig_gr, use_container_width=True, config=PLOTLY_CONFIG)
 
     st.markdown("---")
 
@@ -263,7 +304,7 @@ def render(df: pd.DataFrame):
             "margin": {**lay_sh.get("margin",{}), "r": 60}
         })
         fig_sh.update_layout(**lay_sh)
-        st.plotly_chart(fig_sh, use_container_width=True)
+        st.plotly_chart(fig_sh, use_container_width=True, config=PLOTLY_CONFIG)
 
     st.markdown("---")
 
