@@ -299,3 +299,4 @@ class Aggregator:
         else:
             # 2025: sum BEV + PHEV + FCEV (no EV aggregate in EV sales)
             return df[df["powertrain"].isin(_EV_COMPONENTS)]
+ 
