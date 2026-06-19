@@ -25,6 +25,46 @@ _REGIME_EXPLAINER = {
 
 
 def render(df: pd.DataFrame):
+    # ── CSS para modebar transparente ──────────────────────────────────────
+    st.markdown("""
+    <style>
+    .modebar {
+        background-color: transparent !important;
+        box-shadow: none !important;
+        border-radius: 8px !important;
+        padding: 4px 8px !important;
+    }
+    .modebar .icon {
+        fill: #1f3a6e !important;
+        opacity: 0.7 !important;
+        transition: opacity 0.2s !important;
+    }
+    .modebar .icon:hover {
+        fill: #0d1117 !important;
+        opacity: 1 !important;
+    }
+    .modebar-btn:hover {
+        background-color: rgba(31, 58, 110, 0.08) !important;
+        border-radius: 4px !important;
+    }
+    .modebar-group {
+        background-color: transparent !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Configuração padrão para os gráficos ──────────────────────────────
+    PLOTLY_CONFIG = {
+        'displayModeBar': True,
+        'displaylogo': False,
+        'modeBarButtonsToRemove': [
+            'zoom2d', 'pan2d', 'select2d', 'lasso2d',
+            'zoomIn2d', 'zoomOut2d', 'autoScale2d',
+            'resetScale2d', 'toImage', 'sendDataToCloud'
+        ],
+        'responsive': True,
+    }
+
     st.markdown("## Country Lab")
     st.markdown("Deep-dive into any country's EV transition — history, trajectory, fuel context and regime.")
     st.markdown("---")
@@ -100,7 +140,7 @@ def render(df: pd.DataFrame):
         lay = base_layout(280, "Annual EV Sales (thousand units)")
         lay.update({"yaxis": {**lay.get("yaxis",{}), "title": "k units"}, "showlegend": False})
         fig.update_layout(**lay)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
     with col_r:
         gr_vals = data["growth_rate"].fillna(0)
@@ -112,7 +152,7 @@ def render(df: pd.DataFrame):
         lay2 = base_layout(280, "Year-on-Year Growth (%)")
         lay2.update({"yaxis": {**lay2.get("yaxis",{}), "title": "%"}, "showlegend": False})
         fig2.update_layout(**lay2)
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True, config=PLOTLY_CONFIG)
 
     # ── Stock share ───────────────────────────────────────────────────────────
     if "ev_stock_share" in data.columns and data["ev_stock_share"].notna().any():
@@ -131,7 +171,7 @@ def render(df: pd.DataFrame):
         lay3 = base_layout(220, "EV Stock Share (%)")
         lay3.update({"yaxis": {**lay3.get("yaxis",{}), "title": "% of fleet"}, "showlegend": False})
         fig3.update_layout(**lay3)
-        st.plotly_chart(fig3, use_container_width=True)
+        st.plotly_chart(fig3, use_container_width=True, config=PLOTLY_CONFIG)
 
     st.markdown("---")
 
@@ -184,7 +224,7 @@ def render(df: pd.DataFrame):
                 yaxis=dict(title="Fuel price (USD/L)", gridcolor="rgba(128,128,128,0.12)"),
                 yaxis2=dict(title="EV Sales (k units)", showgrid=False),
             )
-            st.plotly_chart(fig_fuel, use_container_width=True)
+            st.plotly_chart(fig_fuel, use_container_width=True, config=PLOTLY_CONFIG)
 
             if fs.get("gasoline_yoy_pct") is not None:
                 direction = "up" if fs["gasoline_yoy_pct"] > 0 else "down"
@@ -266,7 +306,7 @@ def render(df: pd.DataFrame):
     lay_d.update({"xaxis": {**lay_d.get("xaxis",{}), "title": "Year"},
                    "yaxis": {**lay_d.get("yaxis",{}), "title": "Thousand units (cumulative)"}})
     fig_d.update_layout(**lay_d)
-    st.plotly_chart(fig_d, use_container_width=True)
+    st.plotly_chart(fig_d, use_container_width=True, config=PLOTLY_CONFIG)
 
     st.markdown("---")
 
@@ -314,4 +354,4 @@ def render(df: pd.DataFrame):
         lay_r.update({"xaxis": {**lay_r.get("xaxis",{}), "title": "Year"},
                        "yaxis": {**lay_r.get("yaxis",{}), "title": "Thousand units"}})
         fig_r.update_layout(**lay_r)
-        st.plotly_chart(fig_r, use_container_width=True)
+        st.plotly_chart(fig_r, use_container_width=True, config=PLOTLY_CONFIG)
