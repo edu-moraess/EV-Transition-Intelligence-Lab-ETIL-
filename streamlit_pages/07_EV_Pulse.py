@@ -19,6 +19,47 @@ import json
 from datetime import datetime, timedelta
 
 
+# ── CSS para modebar transparente (opcional, mantido por consistência) ────
+st.markdown("""
+<style>
+.modebar {
+    background-color: transparent !important;
+    box-shadow: none !important;
+    border-radius: 8px !important;
+    padding: 4px 8px !important;
+}
+.modebar .icon {
+    fill: #1f3a6e !important;
+    opacity: 0.7 !important;
+    transition: opacity 0.2s !important;
+}
+.modebar .icon:hover {
+    fill: #0d1117 !important;
+    opacity: 1 !important;
+}
+.modebar-btn:hover {
+    background-color: rgba(31, 58, 110, 0.08) !important;
+    border-radius: 4px !important;
+}
+.modebar-group {
+    background-color: transparent !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ── Configuração padrão para gráficos (não usado aqui, mas mantido) ──────
+PLOTLY_CONFIG = {
+    'displayModeBar': True,
+    'displaylogo': False,
+    'modeBarButtonsToRemove': [
+        'zoom2d', 'pan2d', 'select2d', 'lasso2d',
+        'zoomIn2d', 'zoomOut2d', 'autoScale2d',
+        'resetScale2d', 'toImage', 'sendDataToCloud'
+    ],
+    'responsive': True,
+}
+
+
 # ── NewsAPI ───────────────────────────────────────────────────────────────────
 
 def _fetch_news(query: str, days: int = 7, max_results: int = 8) -> list:
