@@ -10,8 +10,13 @@ _COLORS = {"Bass": NAVY, "Logistic": "#2e7d32", "Gompertz": AMBER}
 
 
 def render(df: pd.DataFrame):
-    st.title("Diffusion Engine")
-    st.caption("Bass, Logistic and Gompertz diffusion models with goodness-of-fit diagnostics")
+    st.markdown("## Diffusion Engine")
+    st.markdown(
+        "Technology adoption follows S-shaped curves — slow at first, then explosive, then plateauing. "
+        "Three models capture this: **Bass** models innovation vs imitation; "
+        "**Logistic** fits a symmetric S-curve; **Gompertz** allows for asymmetric, slower early growth. "
+        "Fit them to any country and project where the market is heading."
+    )
     st.markdown("---")
 
     countries = sorted(df["country"].unique())
