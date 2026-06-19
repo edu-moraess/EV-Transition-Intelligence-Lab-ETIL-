@@ -207,7 +207,7 @@ def render(df: pd.DataFrame):
             ev_annual["date"] = pd.to_datetime(ev_annual["year"].astype(str) + "-07-01")
             fig_fuel.add_trace(go.Bar(
                 x=ev_annual["date"], y=ev_annual["ev_sales"] / 1e3,
-                name="EV Sales (k units, right axis)",
+                name="EV Sales (k units)",  # <-- ALTERAÇÃO AQUI (removido ", right axis")
                 marker_color=NAVY, opacity=0.25,
                 width=1000 * 3600 * 24 * 300,
                 hovertemplate="%{x|%Y}: %{y:.1f}k EV units<extra></extra>",
