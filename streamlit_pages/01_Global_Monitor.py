@@ -127,16 +127,37 @@ def render(df: pd.DataFrame):
         yaxis="y2",
         hovertemplate="Year %{x}: %{y:.1f}% YoY<extra></extra>",
     ))
-    fig_ts.update_layout(
-        **{k: v for k, v in base_layout(360).items()},
-        yaxis=dict(title="Million units",
-                   gridcolor="rgba(128,128,128,0.12)", tickfont=dict(size=10)),
-        yaxis2=dict(title="YoY growth (%)", overlaying="y", side="right",
-                    showgrid=False, tickfont=dict(size=10), zeroline=False),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                    bgcolor="rgba(0,0,0,0)"),
-        barmode="overlay",
-    )
+
+    # ---- CORREÇÃO AQUI: combinar layouts sem duplicar 'yaxis' ----
+    layout_base = base_layout(360)  # dicionário base
+    # Atualiza/substitui as chaves desejadas
+    layout_base.update({
+        "yaxis": dict(
+            title="Million units",
+            gridcolor="rgba(128,128,128,0.12)",
+            tickfont=dict(size=10)
+        ),
+        "yaxis2": dict(
+            title="YoY growth (%)",
+            overlaying="y",
+            side="right",
+            showgrid=False,
+            tickfont=dict(size=10),
+            zeroline=False
+        ),
+        "legend": dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(0,0,0,0)"
+        ),
+        "barmode": "overlay",
+    })
+    fig_ts.update_layout(**layout_base)
+    # ---- FIM CORREÇÃO ----
+
     st.plotly_chart(fig_ts, use_container_width=True)
 
     st.markdown("---")
@@ -163,10 +184,12 @@ def render(df: pd.DataFrame):
             hovertemplate="%{y}: %{x:.2f}M units<extra></extra>",
         ))
         lay_r = base_layout(300)
-        lay_r.update({"xaxis": {**lay_r.get("xaxis",{}), "title": "Million units"},
-                       "yaxis": {**lay_r.get("yaxis",{}), "title": ""},
-                       "showlegend": False,
-                       "margin": {**lay_r.get("margin",{}), "r": 70}})
+        lay_r.update({
+            "xaxis": {**lay_r.get("xaxis",{}), "title": "Million units"},
+            "yaxis": {**lay_r.get("yaxis",{}), "title": ""},
+            "showlegend": False,
+            "margin": {**lay_r.get("margin",{}), "r": 70}
+        })
         fig_reg.update_layout(**lay_r)
         st.plotly_chart(fig_reg, use_container_width=True)
 
@@ -190,10 +213,12 @@ def render(df: pd.DataFrame):
             hovertemplate="%{y}: %{x:+.1f}% YoY<extra></extra>",
         ))
         lay_g = base_layout(300)
-        lay_g.update({"xaxis": {**lay_g.get("xaxis",{}), "title": "YoY growth (%)"},
-                       "yaxis": {**lay_g.get("yaxis",{}), "title": ""},
-                       "showlegend": False,
-                       "margin": {**lay_g.get("margin",{}), "r": 70}})
+        lay_g.update({
+            "xaxis": {**lay_g.get("xaxis",{}), "title": "YoY growth (%)"},
+            "yaxis": {**lay_g.get("yaxis",{}), "title": ""},
+            "showlegend": False,
+            "margin": {**lay_g.get("margin",{}), "r": 70}
+        })
         fig_gr.update_layout(**lay_g)
         st.plotly_chart(fig_gr, use_container_width=True)
 
@@ -231,10 +256,12 @@ def render(df: pd.DataFrame):
             hovertemplate="%{y}: %{x:.1f}% EV stock share<extra></extra>",
         ))
         lay_sh = base_layout(360)
-        lay_sh.update({"xaxis": {**lay_sh.get("xaxis",{}), "title": "EV stock share (%)"},
-                        "yaxis": {**lay_sh.get("yaxis",{}), "title": ""},
-                        "showlegend": False,
-                        "margin": {**lay_sh.get("margin",{}), "r": 60}})
+        lay_sh.update({
+            "xaxis": {**lay_sh.get("xaxis",{}), "title": "EV stock share (%)"},
+            "yaxis": {**lay_sh.get("yaxis",{}), "title": ""},
+            "showlegend": False,
+            "margin": {**lay_sh.get("margin",{}), "r": 60}
+        })
         fig_sh.update_layout(**lay_sh)
         st.plotly_chart(fig_sh, use_container_width=True)
 
