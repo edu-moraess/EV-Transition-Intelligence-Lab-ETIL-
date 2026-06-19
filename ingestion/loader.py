@@ -324,3 +324,4 @@ def load_all_datasets(
 def load_raw(year: Literal[2025, 2026]) -> pd.DataFrame:
     """Module-level shortcut for IEALoader().load_raw()."""
     return IEALoader().load_raw(year)
+ 
