@@ -6,4 +6,3 @@ def __getattr__(name):
         from .world_map import WorldMap
         return WorldMap
     raise AttributeError(f"module 'visualization' has no attribute {name!r}")
- 
