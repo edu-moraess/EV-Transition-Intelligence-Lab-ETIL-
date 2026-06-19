@@ -12,8 +12,13 @@ _REGIME_COLORS = {0: SLATE, 1: NAVY_LIGHT, 2: GREEN_MED, 3: AMBER, 4: RED_DARK}
 
 
 def render(df: pd.DataFrame):
-    st.title("Regime Detection")
-    st.caption("Gaussian Mixture Model (GMM) + Bayesian Changepoint Detection")
+    st.markdown("## Regime Detection")
+    st.markdown(
+        "Not all EV markets are in the same phase. A **Gaussian Mixture Model** classifies each "
+        "year in a country's history into one of four adoption regimes — Emerging, Expansion, "
+        "Acceleration or Maturity. **Bayesian Changepoint Detection** identifies the exact years "
+        "when structural breaks occurred, such as policy changes or infrastructure milestones."
+    )
     st.markdown("---")
 
     countries = sorted(df["country"].unique())
