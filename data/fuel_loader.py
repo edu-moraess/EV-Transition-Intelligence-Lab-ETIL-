@@ -148,3 +148,4 @@ def covered_countries() -> list:
     """Return sorted list of countries with fuel price data."""
     df = load_fuel_prices()
     return sorted(df["country"].unique().tolist()) if not df.empty else []
+ 
