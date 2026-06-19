@@ -12,6 +12,46 @@ from visualization.theme import (
 
 
 def render(df: pd.DataFrame):
+    # ── CSS para modebar transparente ──────────────────────────────────────
+    st.markdown("""
+    <style>
+    .modebar {
+        background-color: transparent !important;
+        box-shadow: none !important;
+        border-radius: 8px !important;
+        padding: 4px 8px !important;
+    }
+    .modebar .icon {
+        fill: #1f3a6e !important;
+        opacity: 0.7 !important;
+        transition: opacity 0.2s !important;
+    }
+    .modebar .icon:hover {
+        fill: #0d1117 !important;
+        opacity: 1 !important;
+    }
+    .modebar-btn:hover {
+        background-color: rgba(31, 58, 110, 0.08) !important;
+        border-radius: 4px !important;
+    }
+    .modebar-group {
+        background-color: transparent !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Configuração padrão para os gráficos ──────────────────────────────
+    PLOTLY_CONFIG = {
+        'displayModeBar': True,
+        'displaylogo': False,
+        'modeBarButtonsToRemove': [
+            'zoom2d', 'pan2d', 'select2d', 'lasso2d',
+            'zoomIn2d', 'zoomOut2d', 'autoScale2d',
+            'resetScale2d', 'toImage', 'sendDataToCloud'
+        ],
+        'responsive': True,
+    }
+
     dataset = df.attrs.get("dataset", "")
 
     st.markdown("## EVQTI Ranking")
@@ -93,7 +133,7 @@ def render(df: pd.DataFrame):
             lay.update({"yaxis": {**lay.get("yaxis",{}), "title": "Rank IC", "range": [-0.40, 0.60]},
                          "showlegend": False})
             fig_ic.update_layout(**lay)
-            st.plotly_chart(fig_ic, use_container_width=True)
+            st.plotly_chart(fig_ic, use_container_width=True, config=PLOTLY_CONFIG)
 
     with col_b:
         st.markdown("##### Do high-EVQTI countries actually grow faster?")
@@ -116,7 +156,7 @@ def render(df: pd.DataFrame):
             lay2.update({"yaxis": {**lay2.get("yaxis",{}), "title": "Mean next-year growth (%)"},
                           "showlegend": False})
             fig_dec.update_layout(**lay2)
-            st.plotly_chart(fig_dec, use_container_width=True)
+            st.plotly_chart(fig_dec, use_container_width=True, config=PLOTLY_CONFIG)
 
     st.markdown("---")
 
@@ -145,7 +185,7 @@ def render(df: pd.DataFrame):
                   "margin": {**lay3.get("margin",{}), "r": 80},
                   "showlegend": False})
     fig_rank.update_layout(**lay3)
-    st.plotly_chart(fig_rank, use_container_width=True)
+    st.plotly_chart(fig_rank, use_container_width=True, config=PLOTLY_CONFIG)
 
     st.markdown("---")
 
@@ -182,7 +222,7 @@ def render(df: pd.DataFrame):
                   "yaxis": {**lay4.get("yaxis",{}), "title": "Historical CAGR (%)"},
                   "showlegend": False})
     fig_sc.update_layout(**lay4)
-    st.plotly_chart(fig_sc, use_container_width=True)
+    st.plotly_chart(fig_sc, use_container_width=True, config=PLOTLY_CONFIG)
 
     st.markdown("---")
     st.subheader("Full Table")
