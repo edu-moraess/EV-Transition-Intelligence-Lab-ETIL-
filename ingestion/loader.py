@@ -1,213 +1,326 @@
 # ingestion/loader.py
 """
-Módulo para carregamento de dados a partir de arquivos Excel/CSV.
-Suporta tanto o formato simplificado (country, year, ev_sales, ...)
-quanto o formato longo IEA (EV_Data_Explorer_GEVO).
+Loader — canonical entry point for IEA GEVO datasets.
+
+Responsibilities:
+  - Load IEA 2025 and/or IEA 2026 raw CSVs
+  - Detect schema automatically (2025 vs 2026)
+  - Validate column types and dimensional integrity
+  - Expose load_dataset() / load_all_datasets() / load_raw()
+  - Delegate aggregation to Aggregator
+
+Primary key enforced: country × category × year × parameter × mode × powertrain
+
+Schema differences handled transparently:
+  IEA 2026: powertrain='EV' exists in EV sales (aggregate)
+  IEA 2025: powertrain='EV' absent from EV sales; only BEV/PHEV/FCEV
 """
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Union, Optional, List
-from config.settings import RAW_DATA_DIR, EXPECTED_COLUMNS
+from typing import Literal
 from utils.logger import setup_logger
-from utils.helpers import validate_columns
+from ingestion.aggregator import Aggregator
 
 logger = setup_logger(__name__)
 
-# Arquivos IEA GEVO em ordem de preferência (mais recente primeiro)
-IEA_CANDIDATES = [
-    "EV_Data_Explorer_2026_GEVO_clean.csv",
-    "EV_Data_Explorer_2025_GEVO_clean.csv",
-]
+# ── File paths ────────────────────────────────────────────────────────────────
+
+_RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
+
+_FILES = {
+    2025: "EV_Data_Explorer_2025_GEVO_clean.csv",
+    2026: "EV_Data_Explorer_2026_GEVO_clean.csv",
+}
+
+# ── Valid dimension values ────────────────────────────────────────────────────
+
+_VALID_CATEGORIES  = {"Historical", "Projection-CPS", "Projection-STEPS"}
+_VALID_MODES       = {
+    "Cars", "Buses", "Trucks", "Vans",
+    "2 and 3 wheelers",
+    "EV", "EVSE",                          # infrastructure labels
+    "All cars", "City car", "Large car",   # battery price segments (2026 only)
+    "Medium car", "Large SUV/Pick-up", "Small SUV/Pick-up",
+}
+_VALID_POWERTRAINS = {
+    "EV", "BEV", "PHEV", "FCEV", "EREV", "ICEV", "ALL",
+    "Publicly available fast", "Publicly available slow",
+    "Publicly available ultra-fast",
+}
+
+# Projection years (excluded from Historical panels)
+_PROJECTION_YEARS = {2030, 2035, 2040, 2045, 2050}
+
+# Aggregate regions to exclude from country-level analysis
+_AGGREGATE_REGIONS = {
+    "World", "Europe", "Asia Pacific", "Advanced Economies",
+    "Developing Economies Excl. China", "European Union",
+    "Central And South America", "North America",
+    "Rest Of The World", "Middle East And Caspian",
+    "Eu27", "Other Asia Pacific", "Other Europe",
+}
 
 
-class DataLoader:
+class IEALoader:
     """
-    Carrega e valida dados de fontes externas.
+    Loads, validates and exposes IEA GEVO data via the Aggregator.
+
+    Parameters
+    ----------
+    raw_dir : Path, optional
+        Directory containing the IEA CSV files. Defaults to data/raw/.
     """
 
-    def __init__(self, raw_dir: Optional[Path] = None):
-        self.raw_dir = raw_dir or RAW_DATA_DIR
-        self.raw_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, raw_dir: Path | None = None):
+        self.raw_dir = raw_dir or _RAW_DIR
 
-    # ------------------------------------------------------------------
-    # API pública
-    # ------------------------------------------------------------------
+    # ── Public API ────────────────────────────────────────────────────────
 
-    def load_from_csv(self, filename: str, **kwargs) -> pd.DataFrame:
+    def load_raw(self, year: Literal[2025, 2026]) -> pd.DataFrame:
         """
-        Carrega dados de um arquivo CSV.
+        Load a raw IEA CSV with no aggregation — full dimensional detail preserved.
 
-        Tenta primeiro o arquivo solicitado. Se estiver vazio ou ausente,
-        procura automaticamente por arquivos IEA GEVO no diretório raw.
+        Returns the dataset with all original columns:
+          region_country, category, parameter, mode, powertrain,
+          year, unit, value, Aggregate group, source, data_version
 
-        Args:
-            filename (str): Nome do arquivo (ou caminho relativo ao raw_dir).
-            **kwargs: Argumentos adicionais para pd.read_csv.
-
-        Returns:
-            pd.DataFrame: Dados no formato padronizado.
+        Primary key: region_country × category × year × parameter × mode × powertrain
         """
-        try:
-            file_path = self._resolve_path(filename)
-            logger.info(f"Carregando CSV: {file_path}")
-            df = pd.read_csv(file_path, **kwargs)
-            if df.empty:
-                raise ValueError("Arquivo CSV vazio.")
-            self._validate(df)
-            return df
-        except (FileNotFoundError, ValueError, pd.errors.EmptyDataError) as e:
-            logger.warning(f"Não foi possível carregar '{filename}': {e}. "
-                           "Procurando arquivos IEA GEVO alternativos...")
-            return self._load_iea_gevo()
-
-    def load_from_excel(self, filename: str, sheet_name: Union[str, int] = 0, **kwargs) -> pd.DataFrame:
-        """
-        Carrega dados de um arquivo Excel.
-        """
-        file_path = self._resolve_path(filename)
-        logger.info(f"Carregando Excel: {file_path} (sheet={sheet_name})")
-        df = pd.read_excel(file_path, sheet_name=sheet_name, **kwargs)
-        self._validate(df)
+        path = self._resolve(year)
+        df   = pd.read_csv(path)
+        df   = self._standardise_columns(df)
+        self._validate(df, year)
+        logger.info(
+            f"IEA {year} raw loaded | {df.shape[0]} rows | "
+            f"{df['region_country'].nunique()} countries | "
+            f"categories: {sorted(df['category'].unique())}"
+        )
         return df
 
-    # ------------------------------------------------------------------
-    # Internos
-    # ------------------------------------------------------------------
+    def load_dataset(
+        self,
+        year: Literal[2025, 2026],
+        category: str = "Historical",
+        mode: str = "Cars",
+        countries_only: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Load and aggregate a single IEA dataset into the ETIL panel format.
 
-    def _resolve_path(self, filename: str) -> Path:
-        """Resolve caminho absoluto do arquivo."""
-        path = Path(filename)
-        if not path.is_absolute():
-            path = self.raw_dir / path
+        Aggregation is handled by Aggregator, which correctly selects:
+          - powertrain='EV'          for IEA 2026 (aggregate exists)
+          - BEV + PHEV + FCEV        for IEA 2025 (no aggregate in EV sales)
+
+        Parameters
+        ----------
+        year         : 2025 or 2026
+        category     : 'Historical', 'Projection-CPS', or 'Projection-STEPS'
+        mode         : 'Cars', 'Buses', 'Trucks', 'Vans', '2 and 3 wheelers'
+        countries_only: Remove aggregate regions (World, Europe, etc.)
+
+        Returns
+        -------
+        pd.DataFrame
+            Columns: country, category, year, mode, ev_sales, ev_stock,
+                     ev_sales_share, ev_stock_share, charging_points, data_source
+        """
+        df_raw    = self.load_raw(year)
+        schema    = self._detect_schema(df_raw)
+        agg       = Aggregator(df_raw, schema=schema)
+        panel     = agg.build_panel(category=category, mode=mode)
+
+        if countries_only:
+            panel = panel[
+                ~panel["country"].str.title().isin(_AGGREGATE_REGIONS)
+            ].reset_index(drop=True)
+
+        # Remove projection years from Historical panels
+        if category == "Historical":
+            panel = panel[~panel["year"].isin(_PROJECTION_YEARS)]
+
+        panel = panel.sort_values(["country", "year"]).reset_index(drop=True)
+        logger.info(
+            f"Dataset {year} | category={category} mode={mode} | "
+            f"{panel['country'].nunique()} countries | {panel.shape[0]} rows"
+        )
+        return panel
+
+    def load_all_datasets(
+        self,
+        category: str = "Historical",
+        mode: str = "Cars",
+        countries_only: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Load IEA 2025 and 2026, combine with deduplication.
+
+        Strategy: 2026 takes priority over 2025 for overlapping (country, year) pairs.
+        2025-only observations (e.g. countries absent from 2026) are preserved.
+
+        Returns
+        -------
+        pd.DataFrame
+            Same schema as load_dataset(), with data_source='combined'.
+        """
+        panels = []
+        for year in [2025, 2026]:
+            try:
+                p = self.load_dataset(year, category=category,
+                                       mode=mode, countries_only=countries_only)
+                panels.append(p)
+            except FileNotFoundError:
+                logger.warning(f"IEA {year} file not found — skipped.")
+
+        if not panels:
+            raise RuntimeError("No datasets available in data/raw/.")
+
+        combined = (
+            pd.concat(panels, ignore_index=True)
+            .sort_values("data_source", ascending=False)   # 2026 first
+            .drop_duplicates(subset=["country", "year"], keep="first")
+            .sort_values(["country", "year"])
+            .reset_index(drop=True)
+        )
+        combined["data_source"] = "combined"
+        logger.info(
+            f"Combined dataset | {combined['country'].nunique()} countries | "
+            f"years {combined['year'].min()}–{combined['year'].max()} | "
+            f"{combined.shape[0]} rows"
+        )
+        return combined
+
+    def get_aggregator(self, year: Literal[2025, 2026]) -> Aggregator:
+        """
+        Return a configured Aggregator for direct dimensional queries.
+
+        Use this when you need non-standard aggregations:
+          agg = loader.get_aggregator(2026)
+          trucks = agg.ev_sales(category='Historical', mode='Trucks')
+          breakdown = agg.breakdown_by_powertrain(mode='Cars')
+        """
+        df_raw = self.load_raw(year)
+        schema = self._detect_schema(df_raw)
+        return Aggregator(df_raw, schema=schema)
+
+    def available_modes(self, year: Literal[2025, 2026]) -> list:
+        """Vehicle modes available in a dataset for EV sales."""
+        df = self.load_raw(year)
+        ev_sales = df[df["parameter"] == "EV sales"]
+        vehicle_modes = {"Cars","Buses","Trucks","Vans","2 and 3 wheelers"}
+        return sorted(set(ev_sales["mode"].unique()) & vehicle_modes)
+
+    def available_projections(self, year: Literal[2025, 2026]) -> list:
+        """Projection scenarios available in a dataset."""
+        df = self.load_raw(year)
+        return sorted(c for c in df["category"].unique() if c.startswith("Projection"))
+
+    # ── Internal ──────────────────────────────────────────────────────────
+
+    def _resolve(self, year: int) -> Path:
+        filename = _FILES.get(year)
+        if not filename:
+            raise ValueError(f"Year {year} not recognised. Use 2025 or 2026.")
+        path = self.raw_dir / filename
         if not path.exists():
-            raise FileNotFoundError(f"Arquivo não encontrado: {path}")
+            raise FileNotFoundError(
+                f"IEA {year} file not found: {path}\n"
+                f"Place '{filename}' in {self.raw_dir}/"
+            )
         return path
 
-    def _validate(self, df: pd.DataFrame) -> None:
-        """Valida a estrutura básica do DataFrame."""
-        required = ["country", "year", "ev_sales"]
-        validate_columns(df, required)
-        if not pd.api.types.is_integer_dtype(df["year"]):
-            raise ValueError("Coluna 'year' deve ser inteira.")
-        if not pd.api.types.is_numeric_dtype(df["ev_sales"]):
-            raise ValueError("Coluna 'ev_sales' deve ser numérica.")
-        for col in ["total_sales", "charging_points", "population", "gdp"]:
-            if col not in df.columns:
-                df[col] = None
-        logger.info(f"Dados carregados com sucesso: {df.shape[0]} registros")
-
-    # ------------------------------------------------------------------
-    # Pipeline IEA GEVO
-    # ------------------------------------------------------------------
-
-    def _load_iea_gevo(self) -> pd.DataFrame:
-        """
-        Carrega e transforma um arquivo IEA GEVO (formato longo) para
-        o formato padronizado do ETIL.
-        """
-        for candidate in IEA_CANDIDATES:
-            path = self.raw_dir / candidate
-            if path.exists():
-                logger.info(f"Usando arquivo IEA GEVO: {path}")
-                df_raw = pd.read_csv(path)
-                df = self._transform_iea_gevo(df_raw)
-                logger.info(f"IEA GEVO transformado: {df.shape[0]} registros de {df['country'].nunique()} países.")
-                return df
-
-        raise FileNotFoundError(
-            "Nenhum arquivo de dados encontrado. "
-            f"Coloque um dos seguintes na pasta data/raw/: "
-            f"{', '.join(IEA_CANDIDATES)} ou ev_data.csv"
-        )
-
-    def _transform_iea_gevo(self, df_raw: pd.DataFrame) -> pd.DataFrame:
-        """
-        Transforma o formato longo IEA (region_country, parameter, value, ...)
-        para o formato wide padronizado (country, year, ev_sales, ...).
-
-        Regras de mapeamento:
-          - ev_sales       : parameter='EV sales', powertrain='EV', category='Historical'
-          - total_sales    : parameter='EV sales', powertrain IN ('EV','ICEV'), category='Historical', soma por país/ano
-          - charging_points: parameter='EV charging points', category='Historical', soma por país/ano
-          - ev_stock_share : parameter='EV stock share', powertrain='EV', mode='Cars', category='Historical'
-        """
-        hist = df_raw[df_raw["category"] == "Historical"].copy()
-
-        # --- ev_sales ---
-        ev_sales = (
-            hist[
-                (hist["parameter"] == "EV sales") &
-                (hist["powertrain"] == "EV")
-            ]
-            .groupby(["region_country", "year"])["value"]
-            .sum()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "ev_sales"})
-        )
-
-        # --- total_sales (EV + ICEV quando disponível, senão só EV) ---
-        total_sales = (
-            hist[
-                (hist["parameter"] == "EV sales") &
-                (hist["powertrain"].isin(["EV", "ICEV"]))
-            ]
-            .groupby(["region_country", "year"])["value"]
-            .sum()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "total_sales"})
-        )
-
-        # --- charging_points ---
-        charging = (
-            hist[hist["parameter"] == "EV charging points"]
-            .groupby(["region_country", "year"])["value"]
-            .sum()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "charging_points"})
-        )
-
-        # --- ev_stock_share (Cars, EV) ---
-        share = (
-            hist[
-                (hist["parameter"] == "EV stock share") &
-                (hist["powertrain"] == "EV") &
-                (hist["mode"] == "Cars")
-            ]
-            .groupby(["region_country", "year"])["value"]
-            .mean()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "ev_stock_share"})
-        )
-
-        # --- Merge ---
-        df = ev_sales.copy()
-        df = df.merge(total_sales, on=["country", "year"], how="left")
-        df = df.merge(charging, on=["country", "year"], how="left")
-        df = df.merge(share, on=["country", "year"], how="left")
-
-        # Colunas exigidas pelo pipeline mas não presentes no IEA
-        df["population"] = np.nan
-        df["gdp"] = np.nan
-
-        # Tipos
-        df["year"] = df["year"].astype(int)
-        df["ev_sales"] = pd.to_numeric(df["ev_sales"], errors="coerce")
-
-        # Remove regiões agregadas (mantém apenas países individuais)
-        # Heurística: nomes de regiões costumam ter vírgulas, parênteses ou palavras-chave
-        aggregate_patterns = [
-            "World", "Europe", "Economies", "Region", "Asia", "Africa",
-            "America", "Pacific", "Rest of", "Other", "Total"
-        ]
-        mask_aggregate = df["country"].str.contains(
-            "|".join(aggregate_patterns), case=False, na=False
-        )
-        df = df[~mask_aggregate].reset_index(drop=True)
-
-        # Remove linhas sem ev_sales
-        df = df.dropna(subset=["ev_sales"])
-        df = df[df["ev_sales"] > 0].reset_index(drop=True)
-
+    def _standardise_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Normalise column names and enforce types."""
+        df = df.copy()
+        df.columns = df.columns.str.strip()
+        # Ensure year is integer
+        df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
+        # Ensure value is float
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
         return df
- 
+
+    def _validate(self, df: pd.DataFrame, year: int) -> None:
+        """
+        Validate dimensional integrity of the raw dataset.
+        Logs warnings — does not raise — to allow partial data to pass.
+        """
+        required_cols = {
+            "region_country", "category", "parameter",
+            "mode", "powertrain", "year", "value"
+        }
+        missing = required_cols - set(df.columns)
+        if missing:
+            raise ValueError(f"IEA {year}: missing columns: {missing}")
+
+        # Check for unexpected categories
+        unknown_cats = set(df["category"].unique()) - _VALID_CATEGORIES
+        if unknown_cats:
+            logger.warning(f"IEA {year}: unknown categories: {unknown_cats}")
+
+        # Duplicate primary key check
+        pk = ["region_country", "category", "year", "parameter", "mode", "powertrain"]
+        dupes = df.duplicated(subset=pk, keep=False).sum()
+        if dupes > 0:
+            logger.warning(
+                f"IEA {year}: {dupes} duplicate primary key rows detected. "
+                "These will be summed during aggregation."
+            )
+
+        # Null check
+        null_values = df["value"].isna().sum()
+        null_pct    = null_values / len(df) * 100
+        if null_pct > 20:
+            logger.warning(
+                f"IEA {year}: {null_pct:.1f}% null values in 'value' column."
+            )
+
+        logger.info(
+            f"IEA {year} validation passed | "
+            f"categories: {sorted(df['category'].unique())} | "
+            f"powertrains: {sorted(df['powertrain'].unique())} | "
+            f"null values: {null_pct:.1f}%"
+        )
+
+    @staticmethod
+    def _detect_schema(df: pd.DataFrame) -> str:
+        """
+        Detect IEA schema version.
+
+        2026: powertrain='EV' present in EV sales records
+        2025: only BEV/PHEV/FCEV in EV sales; 'EV' appears only in other parameters
+        """
+        sales_pts = set(
+            df.loc[df["parameter"] == "EV sales", "powertrain"].unique()
+        )
+        schema = "2026" if "EV" in sales_pts else "2025"
+        logger.info(f"Schema detected: IEA {schema} (EV sales powertrains: {sales_pts})")
+        return schema
+
+
+# ── Module-level convenience functions ───────────────────────────────────────
+
+def load_dataset(
+    year: Literal[2025, 2026],
+    category: str = "Historical",
+    mode: str = "Cars",
+    countries_only: bool = True,
+) -> pd.DataFrame:
+    """Module-level shortcut for IEALoader().load_dataset()."""
+    return IEALoader().load_dataset(year, category=category,
+                                     mode=mode, countries_only=countries_only)
+
+
+def load_all_datasets(
+    category: str = "Historical",
+    mode: str = "Cars",
+    countries_only: bool = True,
+) -> pd.DataFrame:
+    """Module-level shortcut for IEALoader().load_all_datasets()."""
+    return IEALoader().load_all_datasets(category=category, mode=mode,
+                                          countries_only=countries_only)
+
+
+def load_raw(year: Literal[2025, 2026]) -> pd.DataFrame:
+    """Module-level shortcut for IEALoader().load_raw()."""
+    return IEALoader().load_raw(year)
