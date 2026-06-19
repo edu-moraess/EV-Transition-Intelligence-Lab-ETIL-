@@ -74,4 +74,4 @@ class FeatureEngineer:
         if "population" in self.df.columns and self.df["population"].notna().any():
             self.df["ev_per_capita"] = self.df["ev_sales"] / (self.df["population"] + 1)
         else:
-            self.df["ev_per_capita"] = np.nan
+            self.df["ev_per_capita"] = np.nan 
