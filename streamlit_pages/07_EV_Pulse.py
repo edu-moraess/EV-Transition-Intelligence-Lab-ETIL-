@@ -2,98 +2,122 @@
 """
 EV Pulse — live news digest with AI summaries.
 
-Uses NewsAPI (free tier: 100 req/day) to fetch EV-related headlines,
-then Claude API (claude-sonnet-4-6) to generate a concise, analytical
-summary of each article relevant to the country/topic selected.
+Data source : NewsAPI (free tier: 100 req/day, 1,000/month)
+AI summary  : Anthropic API (claude-sonnet-4-6)
 
-Setup:
-  Add to .streamlit/secrets.toml:
+Design for resilience:
+  - Every external call wrapped in try/except with a specific user-facing message
+  - Responses cached (1h for news, 24h for AI summaries) to conserve the free quota
+  - Graceful degradation: missing AI key → still show headlines, just no summary
+  - Rate-limit and timeout errors surfaced clearly, not swallowed silently
+  - No partial UI state: if news fetch fails, the page explains why and stops cleanly
+
+Setup — .streamlit/secrets.toml:
     NEWSAPI_KEY = "your_key_here"
+    ANTHROPIC_API_KEY = "your_key_here"   # optional — enables AI summaries
 
-  Get a free key at: https://newsapi.org/register
+Get a free NewsAPI key at: https://newsapi.org/register
 """
 
 import streamlit as st
+import pandas as pd
 import requests
-import json
 from datetime import datetime, timedelta
 
+_NEWSAPI_URL   = "https://newsapi.org/v2/everything"
+_ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+_MODEL         = "claude-sonnet-4-6"
+_TIMEOUT_NEWS  = 8
+_TIMEOUT_AI    = 15
 
-# ── CSS para modebar transparente (opcional, mantido por consistência) ────
-st.markdown("""
-<style>
-.modebar {
-    background-color: transparent !important;
-    box-shadow: none !important;
-    border-radius: 8px !important;
-    padding: 4px 8px !important;
-}
-.modebar .icon {
-    fill: #1f3a6e !important;
-    opacity: 0.7 !important;
-    transition: opacity 0.2s !important;
-}
-.modebar .icon:hover {
-    fill: #0d1117 !important;
-    opacity: 1 !important;
-}
-.modebar-btn:hover {
-    background-color: rgba(31, 58, 110, 0.08) !important;
-    border-radius: 4px !important;
-}
-.modebar-group {
-    background-color: transparent !important;
-}
-</style>
-""", unsafe_allow_html=True)
 
-# ── Configuração padrão para gráficos (não usado aqui, mas mantido) ──────
-PLOTLY_CONFIG = {
-    'displayModeBar': True,
-    'displaylogo': False,
-    'modeBarButtonsToRemove': [
-        'zoom2d', 'pan2d', 'select2d', 'lasso2d',
-        'zoomIn2d', 'zoomOut2d', 'autoScale2d',
-        'resetScale2d', 'toImage', 'sendDataToCloud'
-    ],
-    'responsive': True,
-}
+# ── Secrets access ───────────────────────────────────────────────────────────
+
+def _get_secret(key: str) -> str:
+    """Safely read a secret — never raises, returns empty string if absent."""
+    try:
+        return str(st.secrets.get(key, "") or "")
+    except Exception:
+        return ""
 
 
 # ── NewsAPI ───────────────────────────────────────────────────────────────────
 
-def _fetch_news(query: str, days: int = 7, max_results: int = 8) -> list:
-    """Fetch recent news from NewsAPI."""
-    try:
-        api_key = st.secrets.get("NEWSAPI_KEY", "")
-    except Exception:
-        api_key = ""
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_news(query: str, days: int, max_results: int, api_key: str) -> dict:
+    """
+    Fetch recent news from NewsAPI.
 
+    Returns a dict with one of:
+      {"ok": True,  "articles": [...]}
+      {"ok": False, "error": "<human-readable reason>"}
+
+    Caching by (query, days, max_results, api_key) avoids burning the
+    100 req/day free quota on repeated identical queries within an hour.
+    """
     if not api_key:
-        return []
+        return {"ok": False, "error": "no_key"}
 
     from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-    url = "https://newsapi.org/v2/everything"
     params = {
-        "q":          query,
-        "from":       from_date,
-        "sortBy":     "publishedAt",
-        "language":   "en",
-        "pageSize":   max_results,
-        "apiKey":     api_key,
+        "q":        query,
+        "from":     from_date,
+        "sortBy":   "publishedAt",
+        "language": "en",
+        "pageSize": max_results,
+        "apiKey":   api_key,
     }
+
     try:
-        resp = requests.get(url, params=params, timeout=8)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data.get("articles", [])
-    except Exception:
-        pass
-    return []
+        resp = requests.get(_NEWSAPI_URL, params=params, timeout=_TIMEOUT_NEWS)
+    except requests.exceptions.Timeout:
+        return {"ok": False, "error": "timeout"}
+    except requests.exceptions.ConnectionError:
+        return {"ok": False, "error": "connection"}
+    except Exception as e:
+        return {"ok": False, "error": f"unexpected: {e}"}
+
+    if resp.status_code == 200:
+        data = resp.json()
+        articles = [
+            a for a in data.get("articles", [])
+            if a.get("title") and "[Removed]" not in a.get("title", "")
+        ]
+        return {"ok": True, "articles": articles}
+
+    if resp.status_code == 401:
+        return {"ok": False, "error": "invalid_key"}
+    if resp.status_code == 429:
+        return {"ok": False, "error": "rate_limited"}
+    if resp.status_code == 426:
+        return {"ok": False, "error": "upgrade_required"}
+
+    return {"ok": False, "error": f"http_{resp.status_code}"}
 
 
-def _claude_summary(title: str, description: str, context: str) -> str:
-    """Generate a concise analytical summary via Claude API."""
+_NEWS_ERROR_MESSAGES = {
+    "no_key":           "NewsAPI key not configured.",
+    "timeout":          "NewsAPI did not respond in time. Try again shortly.",
+    "connection":       "Could not reach NewsAPI. Check your network connection.",
+    "invalid_key":      "NewsAPI key was rejected — verify it in secrets.toml.",
+    "rate_limited":     "NewsAPI daily quota reached (free tier: 100 requests/day). Try again tomorrow.",
+    "upgrade_required": "This query requires a paid NewsAPI plan (date range too far back on free tier).",
+}
+
+
+# ── Claude API ────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _claude_summary(title: str, description: str, context: str, api_key: str) -> dict:
+    """
+    Generate a concise analytical summary via the Anthropic API.
+
+    Returns {"ok": True, "text": "..."} or {"ok": False, "error": "..."}.
+    Cached 24h per (title, description, context) — summaries don't change.
+    """
+    if not api_key:
+        return {"ok": False, "error": "no_key"}
+
     prompt = f"""You are an EV market analyst. Summarise this news article for a data-driven audience.
 
 Article title: {title}
@@ -105,33 +129,64 @@ Write 2-3 sentences that:
 2. Explain why it matters for EV transition
 3. Note any uncertainty or caveat
 
-Be direct, factual and analytical. No hype. No bullet points."""
+Be direct, factual and analytical. No hype, no bullet points, no preamble."""
 
     try:
         resp = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"Content-Type": "application/json"},
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 1000,
-                "messages": [{"role": "user", "content": prompt}],
+            _ANTHROPIC_URL,
+            headers={
+                "Content-Type":      "application/json",
+                "x-api-key":         api_key,
+                "anthropic-version": "2023-06-01",
             },
-            timeout=15,
+            json={
+                "model":      _MODEL,
+                "max_tokens": 300,
+                "messages":   [{"role": "user", "content": prompt}],
+            },
+            timeout=_TIMEOUT_AI,
         )
-        if resp.status_code == 200:
-            data = resp.json()
-            blocks = data.get("content", [])
-            return " ".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
-    except Exception:
-        pass
-    return ""
+    except requests.exceptions.Timeout:
+        return {"ok": False, "error": "timeout"}
+    except requests.exceptions.ConnectionError:
+        return {"ok": False, "error": "connection"}
+    except Exception as e:
+        return {"ok": False, "error": f"unexpected: {e}"}
+
+    if resp.status_code == 200:
+        data   = resp.json()
+        blocks = data.get("content", [])
+        text   = " ".join(
+            b.get("text", "") for b in blocks if b.get("type") == "text"
+        ).strip()
+        if text:
+            return {"ok": True, "text": text}
+        return {"ok": False, "error": "empty_response"}
+
+    if resp.status_code == 401:
+        return {"ok": False, "error": "invalid_key"}
+    if resp.status_code == 429:
+        return {"ok": False, "error": "rate_limited"}
+    if resp.status_code == 529:
+        return {"ok": False, "error": "overloaded"}
+
+    return {"ok": False, "error": f"http_{resp.status_code}"}
+
+
+_AI_ERROR_MESSAGES = {
+    "no_key":      "AI summaries disabled — no Anthropic API key configured.",
+    "timeout":     "AI summary timed out.",
+    "connection":  "Could not reach Anthropic API.",
+    "invalid_key": "Anthropic API key was rejected.",
+    "rate_limited":"AI summary rate limit reached — showing headline only.",
+    "overloaded":  "Anthropic API temporarily overloaded — showing headline only.",
+    "empty_response": "AI returned an empty summary.",
+}
 
 
 # ── Render ────────────────────────────────────────────────────────────────────
 
 def render(df: pd.DataFrame = None):
-    import pandas as pd
-
     st.markdown("## ⚡ EV Pulse")
     st.markdown(
         "Live news digest — EV market headlines with AI-generated analysis. "
@@ -139,27 +194,26 @@ def render(df: pd.DataFrame = None):
     )
     st.markdown("---")
 
-    # Check API key
-    try:
-        has_key = bool(st.secrets.get("NEWSAPI_KEY", ""))
-    except Exception:
-        has_key = False
+    news_key = _get_secret("NEWSAPI_KEY")
+    ai_key   = _get_secret("ANTHROPIC_API_KEY")
 
-    if not has_key:
+    if not news_key:
         st.warning(
             "**NewsAPI key not configured.**  \n"
-            "To enable live news, add your key to `.streamlit/secrets.toml`:  \n"
-            "```\nNEWSAPI_KEY = \"your_key_here\"\n```  \n"
-            "Get a free key (100 req/day) at [newsapi.org](https://newsapi.org/register)."
+            "To enable live news, add your key to `.streamlit/secrets.toml`:\n"
+            "```toml\nNEWSAPI_KEY = \"your_key_here\"\n```\n"
+            "Get a free key (100 requests/day) at "
+            "[newsapi.org/register](https://newsapi.org/register)."
         )
         st.markdown("---")
-        st.markdown("### What you'll see here once configured:")
-        st.markdown("""
-- **Topic feed** — latest headlines on EV policy, market moves, infrastructure and technology
-- **Country feed** — news filtered by country, linked to that country's EVQTI position
-- **AI summaries** — each article gets a 2-3 sentence analytical summary from Claude, focusing on market implications
-- **Trend signals** — recurring themes across stories (policy tailwinds, demand signals, supply constraints)
-        """)
+        st.markdown("### What you'll see here once configured")
+        st.markdown(
+            "- **Topic feed** — latest headlines on EV policy, market moves, "
+            "infrastructure and technology\n"
+            "- **Country feed** — news filtered by country\n"
+            "- **AI summaries** — each article gets a 2-3 sentence analytical "
+            "summary from Claude, focused on market implications\n"
+        )
         return
 
     # ── Controls ──────────────────────────────────────────────────────────────
@@ -176,60 +230,77 @@ def render(df: pd.DataFrame = None):
     with col_country:
         country_filter = st.text_input("Filter by country (optional)", placeholder="e.g. Brazil")
     with col_days:
-        days = st.selectbox("Period", [3, 7, 14, 30], index=1)
+        days = st.selectbox("Period (days)", [3, 7, 14, 30], index=1)
 
-    # Build query
-    query = topic
-    if country_filter.strip():
-        query = f"{topic} {country_filter.strip()}"
+    query = f"{topic} {country_filter.strip()}" if country_filter.strip() else topic
 
-    # AI summary toggle
-    ai_on = st.toggle("Generate AI summaries (uses Claude API)", value=True)
+    ai_available = bool(ai_key)
+    ai_on = st.toggle(
+        "Generate AI summaries" + ("" if ai_available else " (requires Anthropic API key)"),
+        value=ai_available,
+        disabled=not ai_available,
+    )
 
     st.markdown("---")
 
-    # ── Fetch ─────────────────────────────────────────────────────────────────
+    # ── Fetch news ────────────────────────────────────────────────────────────
     with st.spinner(f"Fetching latest news on '{query}'..."):
-        articles = _fetch_news(query, days=days, max_results=8)
+        result = _fetch_news(query, days=days, max_results=8, api_key=news_key)
+
+    if not result["ok"]:
+        msg = _NEWS_ERROR_MESSAGES.get(result["error"], f"Unexpected error: {result['error']}")
+        st.error(f"⚠️ {msg}")
+        return
+
+    articles = result["articles"]
 
     if not articles:
         st.info(
-            "No articles found — try a different topic or time window, "
-            "or check your NewsAPI key."
+            f"No articles found for '{query}' in the last {days} days. "
+            "Try a broader topic or a longer time window."
         )
         return
 
     st.markdown(f"**{len(articles)} articles** · Last {days} days · Query: `{query}`")
     st.markdown("---")
 
-    # ── Display ───────────────────────────────────────────────────────────────
-    for i, art in enumerate(articles):
-        title   = art.get("title", "No title") or "No title"
-        desc    = art.get("description", "") or ""
-        url     = art.get("url", "#")
-        source  = art.get("source", {}).get("name", "Unknown source")
-        pub_at  = art.get("publishedAt", "")[:10]
+    # ── Display articles ──────────────────────────────────────────────────────
+    ai_failures = 0
 
-        # Skip removed/paywalled articles
-        if "[Removed]" in title:
-            continue
+    for art in articles:
+        title  = art.get("title", "No title")
+        desc   = art.get("description", "") or ""
+        url    = art.get("url", "#")
+        source = art.get("source", {}).get("name", "Unknown source")
+        pub_at = (art.get("publishedAt") or "")[:10]
 
         with st.container():
             st.markdown(f"**{title}**")
             st.caption(f"{source} · {pub_at} · [Read full article →]({url})")
 
             if desc:
-                st.markdown(f"*{desc[:280]}{'...' if len(desc) > 280 else ''}*")
+                shown = desc[:280] + ("..." if len(desc) > 280 else "")
+                st.markdown(f"*{shown}*")
 
             if ai_on:
-                context = (
-                    f"Query was '{query}'. "
-                    f"Source: {source}. "
-                    "Focus on EV market implications."
-                )
-                with st.spinner("Summarising..."):
-                    summary = _claude_summary(title, desc, context)
-                if summary:
-                    st.success(f"📊 **Analysis:** {summary}")
+                context = f"Query was '{query}'. Source: {source}. Focus on EV market implications."
+                summary_result = _claude_summary(title, desc, context, ai_key)
+                if summary_result["ok"]:
+                    st.success(f"📊 **Analysis:** {summary_result['text']}")
+                else:
+                    ai_failures += 1
+                    # Only show the error inline for the first failure to avoid noise;
+                    # repeated identical failures (e.g. rate limit) are summarised once below.
+                    if ai_failures == 1:
+                        err_msg = _AI_ERROR_MESSAGES.get(
+                            summary_result["error"], summary_result["error"]
+                        )
+                        st.caption(f"ℹ️ {err_msg}")
 
             st.markdown("---")
+
+    if ai_on and ai_failures > 1:
+        st.caption(
+            f"ℹ️ AI summaries failed for {ai_failures} of {len(articles)} articles "
+            "— likely a temporary rate limit. Headlines are still shown above."
+        )
