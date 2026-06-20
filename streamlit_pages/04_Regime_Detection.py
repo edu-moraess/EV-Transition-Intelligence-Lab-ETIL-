@@ -5,53 +5,13 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from models.regimes import HMMRegimeDetector, BayesianChangePoint
-from visualization.theme import base_layout, NAVY, NAVY_LIGHT, RED_DARK, GREEN_MED, AMBER, SLATE, BORDER
+from visualization.theme import chart_config, base_layout, NAVY, NAVY_LIGHT, RED_DARK, GREEN_MED, AMBER, SLATE, BORDER
 
 _REGIME_LABELS = {0: "Emerging", 1: "Expansion", 2: "Acceleration", 3: "Maturity", 4: "Peak"}
 _REGIME_COLORS = {0: SLATE, 1: NAVY_LIGHT, 2: GREEN_MED, 3: AMBER, 4: RED_DARK}
 
 
 def render(df: pd.DataFrame):
-    # ── CSS para modebar transparente ──────────────────────────────────────
-    st.markdown("""
-    <style>
-    .modebar {
-        background-color: transparent !important;
-        box-shadow: none !important;
-        border-radius: 8px !important;
-        padding: 4px 8px !important;
-    }
-    .modebar .icon {
-        fill: #1f3a6e !important;
-        opacity: 0.7 !important;
-        transition: opacity 0.2s !important;
-    }
-    .modebar .icon:hover {
-        fill: #0d1117 !important;
-        opacity: 1 !important;
-    }
-    .modebar-btn:hover {
-        background-color: rgba(31, 58, 110, 0.08) !important;
-        border-radius: 4px !important;
-    }
-    .modebar-group {
-        background-color: transparent !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # ── Configuração padrão para os gráficos ──────────────────────────────
-    PLOTLY_CONFIG = {
-        'displayModeBar': True,
-        'displaylogo': False,
-        'modeBarButtonsToRemove': [
-            'zoom2d', 'pan2d', 'select2d', 'lasso2d',
-            'zoomIn2d', 'zoomOut2d', 'autoScale2d',
-            'resetScale2d', 'toImage', 'sendDataToCloud'
-        ],
-        'responsive': True,
-    }
-
     st.markdown("## Regime Detection")
     st.markdown(
         "Not all EV markets are in the same phase. A **Gaussian Mixture Model** classifies each "
@@ -151,7 +111,7 @@ def render(df: pd.DataFrame):
     for ann in fig.layout.annotations:
         ann.font.size = 12
     fig.update_layout(**lay)
-    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+    st.plotly_chart(fig, use_container_width=True, config=chart_config())
 
     st.dataframe(pd.DataFrame({
         "Year":       data["year"].values,
@@ -182,6 +142,6 @@ def render(df: pd.DataFrame):
                         "yaxis": {**lay_cp.get("yaxis", {}), "title": "Thousand units"},
                         "showlegend": False})
         fig_cp.update_layout(**lay_cp)
-        st.plotly_chart(fig_cp, use_container_width=True, config=PLOTLY_CONFIG)
+        st.plotly_chart(fig_cp, use_container_width=True, config=chart_config())
     else:
         st.info("No structural breaks detected.")
