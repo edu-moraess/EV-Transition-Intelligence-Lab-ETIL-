@@ -7,6 +7,7 @@ from plotly.subplots import make_subplots
 from analytics.country_analysis import CountryAnalyzer
 from models.diffusion import BassDiffusion, LogisticGrowth, GompertzModel
 from data.fuel_loader import get_fuel_summary, get_monthly_fuel, covered_countries
+from data.world_bank_client import get_country_fundamentals, get_fundamentals_score
 from visualization.theme import (
     base_layout, bar_color_signed,
     NAVY, NAVY_LIGHT, RED_DARK, GREEN_MED, AMBER, SLATE
@@ -25,46 +26,6 @@ _REGIME_EXPLAINER = {
 
 
 def render(df: pd.DataFrame):
-    # ── CSS para modebar transparente ──────────────────────────────────────
-    st.markdown("""
-    <style>
-    .modebar {
-        background-color: transparent !important;
-        box-shadow: none !important;
-        border-radius: 8px !important;
-        padding: 4px 8px !important;
-    }
-    .modebar .icon {
-        fill: #1f3a6e !important;
-        opacity: 0.7 !important;
-        transition: opacity 0.2s !important;
-    }
-    .modebar .icon:hover {
-        fill: #0d1117 !important;
-        opacity: 1 !important;
-    }
-    .modebar-btn:hover {
-        background-color: rgba(31, 58, 110, 0.08) !important;
-        border-radius: 4px !important;
-    }
-    .modebar-group {
-        background-color: transparent !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # ── Configuração padrão para os gráficos ──────────────────────────────
-    PLOTLY_CONFIG = {
-        'displayModeBar': True,
-        'displaylogo': False,
-        'modeBarButtonsToRemove': [
-            'zoom2d', 'pan2d', 'select2d', 'lasso2d',
-            'zoomIn2d', 'zoomOut2d', 'autoScale2d',
-            'resetScale2d', 'toImage', 'sendDataToCloud'
-        ],
-        'responsive': True,
-    }
-
     st.markdown("## Country Lab")
     st.markdown("Deep-dive into any country's EV transition — history, trajectory, fuel context and regime.")
     st.markdown("---")
@@ -125,6 +86,44 @@ def render(df: pd.DataFrame):
                       help="Annualised std dev of monthly gasoline returns (last 12m). "
                            "High volatility increases the attractiveness of EVs as a stable-cost alternative.")
 
+    # ── Country fundamentals (World Bank) ──────────────────────────────────────
+    fundamentals = get_country_fundamentals(selected)
+    if fundamentals.get("coverage", 0) > 0:
+        st.markdown("---")
+        st.markdown("### Economic context")
+        st.markdown(
+            "EV adoption doesn't happen in a vacuum — it depends on income levels, "
+            "urbanization and economic momentum. These figures from the World Bank "
+            "provide context for interpreting the EV trends above."
+        )
+        wb1, wb2, wb3, wb4, wb5 = st.columns(5)
+        if "gdp_per_capita" in fundamentals:
+            wb1.metric("GDP per capita",
+                       f"${fundamentals['gdp_per_capita']:,.0f}",
+                       help=f"World Bank, {fundamentals.get('gdp_per_capita_year','')}. "
+                            "Higher income generally supports faster EV adoption.")
+        if "population" in fundamentals:
+            pop = fundamentals["population"]
+            pop_label = f"{pop/1e6:.1f}M" if pop >= 1e6 else f"{pop:,.0f}"
+            wb2.metric("Population", pop_label,
+                       help=f"World Bank, {fundamentals.get('population_year','')}.")
+        if "urbanization" in fundamentals:
+            wb3.metric("Urbanization",
+                       f"{fundamentals['urbanization']:.0f}%",
+                       help=f"World Bank, {fundamentals.get('urbanization_year','')}. "
+                            "Urban populations have shorter commutes and more charging access.")
+        if "gdp_growth" in fundamentals:
+            wb4.metric("GDP growth",
+                       f"{fundamentals['gdp_growth']:+.1f}%",
+                       help=f"World Bank, {fundamentals.get('gdp_growth_year','')}. "
+                            "Economic momentum supports vehicle purchases generally.")
+        score = get_fundamentals_score(fundamentals)
+        if score is not None:
+            wb5.metric("Fundamentals score",
+                       f"{score:.0f}/100",
+                       help="Equally-weighted composite of GDP per capita, urbanization, "
+                            "GDP growth and CO2/capita — a context score, not a predictive factor.")
+
     st.markdown("---")
 
     # ── Sales + YoY ──────────────────────────────────────────────────────────
@@ -140,7 +139,7 @@ def render(df: pd.DataFrame):
         lay = base_layout(280, "Annual EV Sales (thousand units)")
         lay.update({"yaxis": {**lay.get("yaxis",{}), "title": "k units"}, "showlegend": False})
         fig.update_layout(**lay)
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+        st.plotly_chart(fig, use_container_width=True)
 
     with col_r:
         gr_vals = data["growth_rate"].fillna(0)
@@ -152,7 +151,7 @@ def render(df: pd.DataFrame):
         lay2 = base_layout(280, "Year-on-Year Growth (%)")
         lay2.update({"yaxis": {**lay2.get("yaxis",{}), "title": "%"}, "showlegend": False})
         fig2.update_layout(**lay2)
-        st.plotly_chart(fig2, use_container_width=True, config=PLOTLY_CONFIG)
+        st.plotly_chart(fig2, use_container_width=True)
 
     # ── Stock share ───────────────────────────────────────────────────────────
     if "ev_stock_share" in data.columns and data["ev_stock_share"].notna().any():
@@ -171,7 +170,7 @@ def render(df: pd.DataFrame):
         lay3 = base_layout(220, "EV Stock Share (%)")
         lay3.update({"yaxis": {**lay3.get("yaxis",{}), "title": "% of fleet"}, "showlegend": False})
         fig3.update_layout(**lay3)
-        st.plotly_chart(fig3, use_container_width=True, config=PLOTLY_CONFIG)
+        st.plotly_chart(fig3, use_container_width=True)
 
     st.markdown("---")
 
@@ -207,7 +206,7 @@ def render(df: pd.DataFrame):
             ev_annual["date"] = pd.to_datetime(ev_annual["year"].astype(str) + "-07-01")
             fig_fuel.add_trace(go.Bar(
                 x=ev_annual["date"], y=ev_annual["ev_sales"] / 1e3,
-                name="EV Sales (k units)",  # <-- ALTERAÇÃO AQUI (removido ", right axis")
+                name="EV Sales (k units, right axis)",
                 marker_color=NAVY, opacity=0.25,
                 width=1000 * 3600 * 24 * 300,
                 hovertemplate="%{x|%Y}: %{y:.1f}k EV units<extra></extra>",
@@ -224,7 +223,7 @@ def render(df: pd.DataFrame):
                 yaxis=dict(title="Fuel price (USD/L)", gridcolor="rgba(128,128,128,0.12)"),
                 yaxis2=dict(title="EV Sales (k units)", showgrid=False),
             )
-            st.plotly_chart(fig_fuel, use_container_width=True, config=PLOTLY_CONFIG)
+            st.plotly_chart(fig_fuel, use_container_width=True)
 
             if fs.get("gasoline_yoy_pct") is not None:
                 direction = "up" if fs["gasoline_yoy_pct"] > 0 else "down"
@@ -306,7 +305,7 @@ def render(df: pd.DataFrame):
     lay_d.update({"xaxis": {**lay_d.get("xaxis",{}), "title": "Year"},
                    "yaxis": {**lay_d.get("yaxis",{}), "title": "Thousand units (cumulative)"}})
     fig_d.update_layout(**lay_d)
-    st.plotly_chart(fig_d, use_container_width=True, config=PLOTLY_CONFIG)
+    st.plotly_chart(fig_d, use_container_width=True)
 
     st.markdown("---")
 
@@ -354,4 +353,4 @@ def render(df: pd.DataFrame):
         lay_r.update({"xaxis": {**lay_r.get("xaxis",{}), "title": "Year"},
                        "yaxis": {**lay_r.get("yaxis",{}), "title": "Thousand units"}})
         fig_r.update_layout(**lay_r)
-        st.plotly_chart(fig_r, use_container_width=True, config=PLOTLY_CONFIG)
+        st.plotly_chart(fig_r, use_container_width=True)
