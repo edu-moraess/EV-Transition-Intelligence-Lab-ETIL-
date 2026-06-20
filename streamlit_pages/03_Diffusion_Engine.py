@@ -4,52 +4,12 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from models.diffusion import BassDiffusion, LogisticGrowth, GompertzModel
-from visualization.theme import base_layout, NAVY, AMBER, SLATE
+from visualization.theme import chart_config, base_layout, NAVY, AMBER, SLATE
 
 _COLORS = {"Bass": NAVY, "Logistic": "#2e7d32", "Gompertz": AMBER}
 
 
 def render(df: pd.DataFrame):
-    # ── CSS para modebar transparente ──────────────────────────────────────
-    st.markdown("""
-    <style>
-    .modebar {
-        background-color: transparent !important;
-        box-shadow: none !important;
-        border-radius: 8px !important;
-        padding: 4px 8px !important;
-    }
-    .modebar .icon {
-        fill: #1f3a6e !important;
-        opacity: 0.7 !important;
-        transition: opacity 0.2s !important;
-    }
-    .modebar .icon:hover {
-        fill: #0d1117 !important;
-        opacity: 1 !important;
-    }
-    .modebar-btn:hover {
-        background-color: rgba(31, 58, 110, 0.08) !important;
-        border-radius: 4px !important;
-    }
-    .modebar-group {
-        background-color: transparent !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # ── Configuração padrão para os gráficos ──────────────────────────────
-    PLOTLY_CONFIG = {
-        'displayModeBar': True,
-        'displaylogo': False,
-        'modeBarButtonsToRemove': [
-            'zoom2d', 'pan2d', 'select2d', 'lasso2d',
-            'zoomIn2d', 'zoomOut2d', 'autoScale2d',
-            'resetScale2d', 'toImage', 'sendDataToCloud'
-        ],
-        'responsive': True,
-    }
-
     st.markdown("## Diffusion Engine")
     st.markdown(
         "Technology adoption follows S-shaped curves — slow at first, then explosive, then plateauing. "
@@ -165,7 +125,7 @@ def render(df: pd.DataFrame):
     lay.update({"xaxis": {**lay.get("xaxis", {}), "title": "Year"},
                  "yaxis": {**lay.get("yaxis", {}), "title": ylab}})
     fig.update_layout(**lay)
-    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+    st.plotly_chart(fig, use_container_width=True, config=chart_config())
 
     # ── Projection table ──────────────────────────────────────────────────
     if fitted:
@@ -222,4 +182,4 @@ def render(df: pd.DataFrame):
                        "yaxis": {**lay_c.get("yaxis", {}),
                                   "title": "Thousand units (cumulative)"}})
         fig_cmp.update_layout(**lay_c)
-        st.plotly_chart(fig_cmp, use_container_width=True, config=PLOTLY_CONFIG)
+        st.plotly_chart(fig_cmp, use_container_width=True, config=chart_config())
