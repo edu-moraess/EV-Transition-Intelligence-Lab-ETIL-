@@ -15,7 +15,7 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from analytics.global_ranking import GlobalRanking
-from visualization.theme import base_layout, bar_color_signed, NAVY, NAVY_LIGHT, NAVY_PALE, RED_DARK, GREEN_MED, AMBER, SLATE
+from visualization.theme import chart_config, base_layout, bar_color_signed, NAVY, NAVY_LIGHT, NAVY_PALE, RED_DARK, GREEN_MED, AMBER, SLATE
 
 
 # ── Regional groupings ───────────────────────────────────────────────────────
@@ -52,50 +52,6 @@ def render(df: pd.DataFrame):
     )
     st.caption(f"Source: IEA Global EV Outlook · Dataset: {dataset} · Vehicle mode: {mode}")
     st.markdown("---")
-
-    # ── CSS para modebar transparente ──────────────────────────────────────
-    st.markdown("""
-    <style>
-    /* Barra de ferramentas do Plotly - totalmente transparente */
-    .modebar {
-        background-color: transparent !important;
-        box-shadow: none !important;
-        border-radius: 8px !important;
-        padding: 4px 8px !important;
-    }
-    /* Ícones com a cor primária do tema */
-    .modebar .icon {
-        fill: #1f3a6e !important;
-        opacity: 0.7 !important;
-        transition: opacity 0.2s !important;
-    }
-    .modebar .icon:hover {
-        fill: #0d1117 !important;
-        opacity: 1 !important;
-    }
-    /* Fundo do botão no hover - sutil */
-    .modebar-btn:hover {
-        background-color: rgba(31, 58, 110, 0.08) !important;
-        border-radius: 4px !important;
-    }
-    /* Remove o fundo do grupo de botões (se houver) */
-    .modebar-group {
-        background-color: transparent !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # ── Configuração padrão para os gráficos ──────────────────────────────
-    PLOTLY_CONFIG = {
-        'displayModeBar': True,        # mantém a barra visível
-        'displaylogo': False,          # remove o logo Plotly
-        'modeBarButtonsToRemove': [    # remove botões desnecessários
-            'zoom2d', 'pan2d', 'select2d', 'lasso2d',
-            'zoomIn2d', 'zoomOut2d', 'autoScale2d',
-            'resetScale2d', 'toImage', 'sendDataToCloud'
-        ],
-        'responsive': True,
-    }
 
     # ── Data prep ────────────────────────────────────────────────────────────
     latest = int(df["year"].max())
@@ -171,35 +127,17 @@ def render(df: pd.DataFrame):
         yaxis="y2",
         hovertemplate="Year %{x}: %{y:.1f}% YoY<extra></extra>",
     ))
-
-    layout_base = base_layout(360)
-    layout_base.update({
-        "yaxis": dict(
-            title="Million units",
-            gridcolor="rgba(128,128,128,0.12)",
-            tickfont=dict(size=10)
-        ),
-        "yaxis2": dict(
-            title="YoY growth (%)",
-            overlaying="y",
-            side="right",
-            showgrid=False,
-            tickfont=dict(size=10),
-            zeroline=False
-        ),
-        "legend": dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            bgcolor="rgba(0,0,0,0)"
-        ),
-        "barmode": "overlay",
-    })
-    fig_ts.update_layout(**layout_base)
-
-    st.plotly_chart(fig_ts, use_container_width=True, config=PLOTLY_CONFIG)
+    fig_ts.update_layout(
+        **{k: v for k, v in base_layout(360).items()},
+        yaxis=dict(title="Million units",
+                   gridcolor="rgba(128,128,128,0.12)", tickfont=dict(size=10)),
+        yaxis2=dict(title="YoY growth (%)", overlaying="y", side="right",
+                    showgrid=False, tickfont=dict(size=10), zeroline=False),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                    bgcolor="rgba(0,0,0,0)"),
+        barmode="overlay",
+    )
+    st.plotly_chart(fig_ts, use_container_width=True, config=chart_config())
 
     st.markdown("---")
 
@@ -225,14 +163,12 @@ def render(df: pd.DataFrame):
             hovertemplate="%{y}: %{x:.2f}M units<extra></extra>",
         ))
         lay_r = base_layout(300)
-        lay_r.update({
-            "xaxis": {**lay_r.get("xaxis",{}), "title": "Million units"},
-            "yaxis": {**lay_r.get("yaxis",{}), "title": ""},
-            "showlegend": False,
-            "margin": {**lay_r.get("margin",{}), "r": 70}
-        })
+        lay_r.update({"xaxis": {**lay_r.get("xaxis",{}), "title": "Million units"},
+                       "yaxis": {**lay_r.get("yaxis",{}), "title": ""},
+                       "showlegend": False,
+                       "margin": {**lay_r.get("margin",{}), "r": 70}})
         fig_reg.update_layout(**lay_r)
-        st.plotly_chart(fig_reg, use_container_width=True, config=PLOTLY_CONFIG)
+        st.plotly_chart(fig_reg, use_container_width=True, config=chart_config())
 
     with col_r:
         st.markdown(f"### Top 10 fastest-growing markets")
@@ -254,14 +190,12 @@ def render(df: pd.DataFrame):
             hovertemplate="%{y}: %{x:+.1f}% YoY<extra></extra>",
         ))
         lay_g = base_layout(300)
-        lay_g.update({
-            "xaxis": {**lay_g.get("xaxis",{}), "title": "YoY growth (%)"},
-            "yaxis": {**lay_g.get("yaxis",{}), "title": ""},
-            "showlegend": False,
-            "margin": {**lay_g.get("margin",{}), "r": 70}
-        })
+        lay_g.update({"xaxis": {**lay_g.get("xaxis",{}), "title": "YoY growth (%)"},
+                       "yaxis": {**lay_g.get("yaxis",{}), "title": ""},
+                       "showlegend": False,
+                       "margin": {**lay_g.get("margin",{}), "r": 70}})
         fig_gr.update_layout(**lay_g)
-        st.plotly_chart(fig_gr, use_container_width=True, config=PLOTLY_CONFIG)
+        st.plotly_chart(fig_gr, use_container_width=True, config=chart_config())
 
     st.markdown("---")
 
@@ -297,14 +231,12 @@ def render(df: pd.DataFrame):
             hovertemplate="%{y}: %{x:.1f}% EV stock share<extra></extra>",
         ))
         lay_sh = base_layout(360)
-        lay_sh.update({
-            "xaxis": {**lay_sh.get("xaxis",{}), "title": "EV stock share (%)"},
-            "yaxis": {**lay_sh.get("yaxis",{}), "title": ""},
-            "showlegend": False,
-            "margin": {**lay_sh.get("margin",{}), "r": 60}
-        })
+        lay_sh.update({"xaxis": {**lay_sh.get("xaxis",{}), "title": "EV stock share (%)"},
+                        "yaxis": {**lay_sh.get("yaxis",{}), "title": ""},
+                        "showlegend": False,
+                        "margin": {**lay_sh.get("margin",{}), "r": 60}})
         fig_sh.update_layout(**lay_sh)
-        st.plotly_chart(fig_sh, use_container_width=True, config=PLOTLY_CONFIG)
+        st.plotly_chart(fig_sh, use_container_width=True, config=chart_config())
 
     st.markdown("---")
 
