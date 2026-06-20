@@ -9,7 +9,7 @@ from models.diffusion import BassDiffusion, LogisticGrowth, GompertzModel
 from data.fuel_loader import get_fuel_summary, get_monthly_fuel, covered_countries
 from data.world_bank_client import get_country_fundamentals, get_fundamentals_score
 from visualization.theme import (
-    base_layout, bar_color_signed,
+    base_layout, bar_color_signed, chart_config,
     NAVY, NAVY_LIGHT, RED_DARK, GREEN_MED, AMBER, SLATE
 )
 
@@ -139,7 +139,7 @@ def render(df: pd.DataFrame):
         lay = base_layout(280, "Annual EV Sales (thousand units)")
         lay.update({"yaxis": {**lay.get("yaxis",{}), "title": "k units"}, "showlegend": False})
         fig.update_layout(**lay)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=chart_config())
 
     with col_r:
         gr_vals = data["growth_rate"].fillna(0)
@@ -151,7 +151,7 @@ def render(df: pd.DataFrame):
         lay2 = base_layout(280, "Year-on-Year Growth (%)")
         lay2.update({"yaxis": {**lay2.get("yaxis",{}), "title": "%"}, "showlegend": False})
         fig2.update_layout(**lay2)
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True, config=chart_config())
 
     # ── Stock share ───────────────────────────────────────────────────────────
     if "ev_stock_share" in data.columns and data["ev_stock_share"].notna().any():
@@ -170,7 +170,7 @@ def render(df: pd.DataFrame):
         lay3 = base_layout(220, "EV Stock Share (%)")
         lay3.update({"yaxis": {**lay3.get("yaxis",{}), "title": "% of fleet"}, "showlegend": False})
         fig3.update_layout(**lay3)
-        st.plotly_chart(fig3, use_container_width=True)
+        st.plotly_chart(fig3, use_container_width=True, config=chart_config())
 
     st.markdown("---")
 
@@ -225,8 +225,11 @@ def render(df: pd.DataFrame):
                 xaxis=dict(gridcolor="rgba(128,128,128,0.12)", tickfont=dict(size=10)),
                 yaxis=dict(title="Fuel price (USD/L)", gridcolor="rgba(128,128,128,0.12)"),
                 yaxis2=dict(title="EV Sales (k units)", showgrid=False),
+                modebar=dict(bgcolor="rgba(0,0,0,0)",
+                             color="rgba(128,128,128,0.6)",
+                             activecolor="rgba(31,58,110,0.9)"),
             )
-            st.plotly_chart(fig_fuel, use_container_width=True)
+            st.plotly_chart(fig_fuel, use_container_width=True, config=chart_config())
 
             if fs.get("gasoline_yoy_pct") is not None:
                 direction = "up" if fs["gasoline_yoy_pct"] > 0 else "down"
@@ -308,7 +311,7 @@ def render(df: pd.DataFrame):
     lay_d.update({"xaxis": {**lay_d.get("xaxis",{}), "title": "Year"},
                    "yaxis": {**lay_d.get("yaxis",{}), "title": "Thousand units (cumulative)"}})
     fig_d.update_layout(**lay_d)
-    st.plotly_chart(fig_d, use_container_width=True)
+    st.plotly_chart(fig_d, use_container_width=True, config=chart_config())
 
     st.markdown("---")
 
@@ -356,4 +359,4 @@ def render(df: pd.DataFrame):
         lay_r.update({"xaxis": {**lay_r.get("xaxis",{}), "title": "Year"},
                        "yaxis": {**lay_r.get("yaxis",{}), "title": "Thousand units"}})
         fig_r.update_layout(**lay_r)
-        st.plotly_chart(fig_r, use_container_width=True)
+        st.plotly_chart(fig_r, use_container_width=True, config=chart_config())
