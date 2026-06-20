@@ -130,6 +130,83 @@ class EVQTI:
             "n_countries":   len(self.country_scores),
         }
 
+    def backtest(
+        self,
+        df: pd.DataFrame,
+        train_years: int = 6,
+        test_years: int = 1,
+        step: int = 1,
+    ) -> pd.DataFrame:
+        """
+        Walk-forward backtest: for each window, the feature weights and
+        winsorization bounds are NOT re-fit — EVQTI's weights are fixed
+        and empirically pre-calibrated (see module docstring), so this
+        backtest measures something more honest than re-fitting in-sample
+        each window: it measures whether a FIXED, already-published factor
+        continues to hold out-of-sample across rolling periods.
+
+        For each window:
+          - "train" years are shown for reference only (no parameters fit here)
+          - "test" years are where IC is actually measured
+
+        This answers: "is the signal degrading over time?" rather than
+        "can we always re-fit a signal that worked." The second question
+        is trivially yes and tells you nothing about robustness.
+
+        Parameters
+        ----------
+        train_years : size of the reference window (not used for fitting,
+                      shown for context — EVQTI has no in-sample parameters
+                      beyond the fixed, pre-calibrated weights)
+        test_years  : number of years per test window
+        step        : how many years to advance the window each iteration
+
+        Returns
+        -------
+        pd.DataFrame
+            Columns: window_start, window_end, ic_mean, ic_std, n_years, n_obs
+        """
+        panel = self._build_panel(df)
+        years = sorted(panel["year"].unique())
+        years = years[1:-1]  # drop first (no lag) and last (no target) year
+
+        if len(years) < train_years + test_years:
+            logger.warning(
+                f"Not enough years for backtest: have {len(years)}, "
+                f"need {train_years + test_years}."
+            )
+            return pd.DataFrame()
+
+        rows = []
+        start_idx = 0
+        while start_idx + train_years + test_years <= len(years):
+            test_window = years[start_idx + train_years : start_idx + train_years + test_years]
+
+            window_ics = []
+            window_n   = 0
+            for yr in test_window:
+                df_yr = self._compute_score(panel[panel["year"] == yr].copy())
+                sub   = df_yr[["country", "evqti_score", "growth_t1_win"]].dropna()
+                if len(sub) < 10:
+                    continue
+                ic_s, _ = stats.spearmanr(sub["evqti_score"], sub["growth_t1_win"])
+                window_ics.append(ic_s)
+                window_n += len(sub)
+
+            if window_ics:
+                rows.append({
+                    "window_start": test_window[0],
+                    "window_end":   test_window[-1],
+                    "ic_mean":      round(float(np.mean(window_ics)), 3),
+                    "ic_std":       round(float(np.std(window_ics)), 3) if len(window_ics) > 1 else 0.0,
+                    "n_years":      len(window_ics),
+                    "n_obs":        window_n,
+                })
+
+            start_idx += step
+
+        return pd.DataFrame(rows)
+
     # ── Construção do painel ─────────────────────────────────────────────
 
     def _build_panel(self, df: pd.DataFrame) -> pd.DataFrame:
