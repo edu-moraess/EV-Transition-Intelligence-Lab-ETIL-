@@ -1,8 +1,8 @@
-def __getattr__(name):
-    if name == "Charts":
-        from .charts import Charts
-        return Charts
-    if name == "WorldMap":
-        from .world_map import WorldMap
-        return WorldMap
-    raise AttributeError(f"module 'visualization' has no attribute {name!r}")
+# visualization/__init__.py
+"""
+Only theme.py is in active use — it is imported directly by all pages.
+This package init is intentionally minimal; the lazy-import pattern used
+elsewhere in the codebase is unnecessary here since theme.py has no heavy
+dependencies (pure constants and dict builders, no plotly/matplotlib import
+side effects worth deferring).
+"""
