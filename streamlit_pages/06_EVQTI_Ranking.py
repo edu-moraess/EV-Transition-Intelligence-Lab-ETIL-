@@ -12,46 +12,6 @@ from visualization.theme import (
 
 
 def render(df: pd.DataFrame):
-    # ── CSS para modebar transparente ──────────────────────────────────────
-    st.markdown("""
-    <style>
-    .modebar {
-        background-color: transparent !important;
-        box-shadow: none !important;
-        border-radius: 8px !important;
-        padding: 4px 8px !important;
-    }
-    .modebar .icon {
-        fill: #1f3a6e !important;
-        opacity: 0.7 !important;
-        transition: opacity 0.2s !important;
-    }
-    .modebar .icon:hover {
-        fill: #0d1117 !important;
-        opacity: 1 !important;
-    }
-    .modebar-btn:hover {
-        background-color: rgba(31, 58, 110, 0.08) !important;
-        border-radius: 4px !important;
-    }
-    .modebar-group {
-        background-color: transparent !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # ── Configuração padrão para os gráficos ──────────────────────────────
-    PLOTLY_CONFIG = {
-        'displayModeBar': True,
-        'displaylogo': False,
-        'modeBarButtonsToRemove': [
-            'zoom2d', 'pan2d', 'select2d', 'lasso2d',
-            'zoomIn2d', 'zoomOut2d', 'autoScale2d',
-            'resetScale2d', 'toImage', 'sendDataToCloud'
-        ],
-        'responsive': True,
-    }
-
     dataset = df.attrs.get("dataset", "")
 
     st.markdown("## EVQTI Ranking")
@@ -133,7 +93,7 @@ def render(df: pd.DataFrame):
             lay.update({"yaxis": {**lay.get("yaxis",{}), "title": "Rank IC", "range": [-0.40, 0.60]},
                          "showlegend": False})
             fig_ic.update_layout(**lay)
-            st.plotly_chart(fig_ic, use_container_width=True, config=PLOTLY_CONFIG)
+            st.plotly_chart(fig_ic, use_container_width=True)
 
     with col_b:
         st.markdown("##### Do high-EVQTI countries actually grow faster?")
@@ -156,7 +116,56 @@ def render(df: pd.DataFrame):
             lay2.update({"yaxis": {**lay2.get("yaxis",{}), "title": "Mean next-year growth (%)"},
                           "showlegend": False})
             fig_dec.update_layout(**lay2)
-            st.plotly_chart(fig_dec, use_container_width=True, config=PLOTLY_CONFIG)
+            st.plotly_chart(fig_dec, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── Backtest ──────────────────────────────────────────────────────────────
+    st.markdown("### Is the signal getting stronger or weaker over time?")
+    st.markdown(
+        "A factor that worked once can simply be luck. To check, we measure the IC "
+        "in rolling test windows — without re-fitting the weights each time. "
+        "This shows whether the **same, fixed factor** keeps working as new years arrive, "
+        "which is a more honest test than re-optimising weights for every period."
+    )
+    try:
+        from models.scoring.evqti import EVQTI as _EVQTIClass
+        bt_model = _EVQTIClass()
+        bt_model.fit(df)
+        backtest_df = bt_model.backtest(df, train_years=6, test_years=1, step=1)
+
+        if not backtest_df.empty:
+            fig_bt = go.Figure()
+            fig_bt.add_trace(go.Scatter(
+                x=backtest_df["window_end"], y=backtest_df["ic_mean"],
+                mode="lines+markers",
+                line=dict(color=NAVY, width=2.5),
+                marker=dict(size=8, color=NAVY),
+                hovertemplate="Year %{x}<br>IC: %{y:.3f}<extra></extra>",
+            ))
+            fig_bt.add_hline(y=0.10, line_dash="dot",
+                             line_color="rgba(128,128,128,0.4)", line_width=1,
+                             annotation_text="Robust threshold (0.10)",
+                             annotation_font_size=9)
+            lay_bt = base_layout(280, "Out-of-sample IC by test year (fixed weights)")
+            lay_bt.update({"yaxis": {**lay_bt.get("yaxis",{}), "title": "IC (test year)"},
+                            "showlegend": False})
+            fig_bt.update_layout(**lay_bt)
+            st.plotly_chart(fig_bt, use_container_width=True)
+
+            recent_ic = backtest_df["ic_mean"].tail(4).mean()
+            early_ic  = backtest_df["ic_mean"].head(4).mean()
+            trend = "strengthened" if recent_ic > early_ic else "weakened"
+            st.caption(
+                f"The signal has **{trend}** over time: average IC was {early_ic:+.3f} "
+                f"in the earliest test years vs {recent_ic:+.3f} in the most recent ones. "
+                f"This is consistent with EV markets gaining enough scale for the cross-country "
+                f"signal to become statistically reliable."
+            )
+        else:
+            st.info("Not enough historical years available for a rolling backtest.")
+    except Exception as e:
+        st.warning(f"Backtest unavailable: {e}")
 
     st.markdown("---")
 
@@ -185,7 +194,7 @@ def render(df: pd.DataFrame):
                   "margin": {**lay3.get("margin",{}), "r": 80},
                   "showlegend": False})
     fig_rank.update_layout(**lay3)
-    st.plotly_chart(fig_rank, use_container_width=True, config=PLOTLY_CONFIG)
+    st.plotly_chart(fig_rank, use_container_width=True)
 
     st.markdown("---")
 
@@ -222,7 +231,7 @@ def render(df: pd.DataFrame):
                   "yaxis": {**lay4.get("yaxis",{}), "title": "Historical CAGR (%)"},
                   "showlegend": False})
     fig_sc.update_layout(**lay4)
-    st.plotly_chart(fig_sc, use_container_width=True, config=PLOTLY_CONFIG)
+    st.plotly_chart(fig_sc, use_container_width=True)
 
     st.markdown("---")
     st.subheader("Full Table")
