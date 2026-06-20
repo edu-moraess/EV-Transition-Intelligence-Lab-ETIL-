@@ -185,6 +185,19 @@ def render(df: pd.DataFrame):
         if not monthly.empty:
             fig_fuel = make_subplots(specs=[[{"secondary_y": True}]])
 
+            # EV sales bars added FIRST so they render behind the price lines,
+            # and sized narrow + very transparent so they read as a subtle
+            # backdrop rather than a solid block covering the chart.
+            ev_annual = data[["year", "ev_sales"]].copy()
+            ev_annual["date"] = pd.to_datetime(ev_annual["year"].astype(str) + "-07-01")
+            fig_fuel.add_trace(go.Bar(
+                x=ev_annual["date"], y=ev_annual["ev_sales"] / 1e3,
+                name="EV Sales (k units, right axis)",
+                marker_color=NAVY, opacity=0.18,
+                width=1000 * 3600 * 24 * 60,  # ~60 days — a slim bar per year, not a solid block
+                hovertemplate="%{x|%Y}: %{y:.1f}k EV units<extra></extra>",
+            ), secondary_y=True)
+
             gas = monthly.dropna(subset=["gasoline_usd"])
             fig_fuel.add_trace(go.Scatter(
                 x=gas["date"], y=gas["gasoline_usd"],
@@ -201,16 +214,6 @@ def render(df: pd.DataFrame):
                     line=dict(color=RED_DARK, width=1.5, dash="dot"),
                     hovertemplate="%{x|%b %Y}: $%{y:.3f}/L<extra></extra>",
                 ), secondary_y=False)
-
-            ev_annual = data[["year","ev_sales"]].copy()
-            ev_annual["date"] = pd.to_datetime(ev_annual["year"].astype(str) + "-07-01")
-            fig_fuel.add_trace(go.Bar(
-                x=ev_annual["date"], y=ev_annual["ev_sales"] / 1e3,
-                name="EV Sales (k units, right axis)",
-                marker_color=NAVY, opacity=0.25,
-                width=1000 * 3600 * 24 * 300,
-                hovertemplate="%{x|%Y}: %{y:.1f}k EV units<extra></extra>",
-            ), secondary_y=True)
 
             fig_fuel.update_layout(
                 height=340, margin=dict(l=0, r=0, t=8, b=0),
