@@ -79,9 +79,53 @@ def base_layout(height: int = 340, title: str = "") -> dict:
             bordercolor="rgba(128,128,128,0.3)",
             font=dict(size=11),
         ),
+        modebar=dict(
+            bgcolor="rgba(0,0,0,0)",
+            color="rgba(128,128,128,0.6)",
+            activecolor="rgba(31,58,110,0.9)",
+        ),
     )
 
 
 def bar_color_signed(values) -> list:
     """Navy for positive values, dark red for negative."""
     return [NAVY if v >= 0 else RED_DARK for v in values]
+
+
+def chart_config() -> dict:
+    """
+    Plotly `config=` dict for st.plotly_chart — makes the modebar
+    (camera/zoom/pan toolbar) transparent instead of the default solid
+    grey box, which otherwise sits on top of the legend and chart title
+    and is visible in both light and dark mode.
+
+    Usage:
+        st.plotly_chart(fig, use_container_width=True, config=chart_config())
+    """
+    return {
+        "displaylogo": False,
+        "modeBarButtonsToRemove": [
+            "select2d", "lasso2d", "autoScale2d",
+            "hoverClosestCartesian", "hoverCompareCartesian",
+            "toggleSpikelines",
+        ],
+        "displayModeBar": "hover",  # only appears on hover, doesn't sit static over the legend
+    }
+
+
+def modebar_layout_patch() -> dict:
+    """
+    Layout-level modebar styling — makes the toolbar background and
+    button icons transparent/neutral so no grey box appears even while
+    visible on hover, in both light and dark Streamlit themes.
+
+    Merge into any layout dict, e.g.:
+        fig.update_layout(**base_layout(300), **modebar_layout_patch())
+    """
+    return {
+        "modebar": dict(
+            bgcolor="rgba(0,0,0,0)",
+            color="rgba(128,128,128,0.6)",
+            activecolor="rgba(31,58,110,0.9)",
+        ),
+    }
