@@ -94,22 +94,17 @@ def bar_color_signed(values) -> list:
 
 def chart_config() -> dict:
     """
-    Plotly `config=` dict for st.plotly_chart — makes the modebar
-    (camera/zoom/pan toolbar) transparent instead of the default solid
-    grey box, which otherwise sits on top of the legend and chart title
-    and is visible in both light and dark mode.
+    Plotly `config=` dict for st.plotly_chart — completely hides the
+    modebar (camera/zoom/pan toolbar). It previously sat as a solid grey
+    box on top of the legend and chart title in both light and dark mode;
+    hiding it entirely removes the visual clutter project-wide.
 
     Usage:
         st.plotly_chart(fig, use_container_width=True, config=chart_config())
     """
     return {
         "displaylogo": False,
-        "modeBarButtonsToRemove": [
-            "select2d", "lasso2d", "autoScale2d",
-            "hoverClosestCartesian", "hoverCompareCartesian",
-            "toggleSpikelines",
-        ],
-        "displayModeBar": "hover",  # only appears on hover, doesn't sit static over the legend
+        "displayModeBar": False,  # never shown, not even on hover
     }
 
 
