@@ -22,12 +22,13 @@ from pathlib import Path
 from typing import Literal
 from utils.logger import setup_logger
 from ingestion.aggregator import Aggregator
+from config.settings import RAW_DATA_DIR
 
 logger = setup_logger(__name__)
 
 # ── File paths ────────────────────────────────────────────────────────────────
 
-_RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
+_RAW_DIR = RAW_DATA_DIR
 
 _FILES = {
     2025: "EV_Data_Explorer_2025_GEVO_clean.csv",
@@ -324,4 +325,3 @@ def load_all_datasets(
 def load_raw(year: Literal[2025, 2026]) -> pd.DataFrame:
     """Module-level shortcut for IEALoader().load_raw()."""
     return IEALoader().load_raw(year)
- 
