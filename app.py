@@ -50,21 +50,59 @@ def _run_pipeline(df_raw: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_data(ttl=600, show_spinner="Loading IEA data...")
 def get_data(dataset_key: str, vehicle_mode: str) -> pd.DataFrame:
+    """
+    Load and process the EV dataset, with automatic fallback.
+
+    If the selected dataset fails to load (missing file, malformed data),
+    falls back to the other available year rather than returning empty —
+    a partial dataset is more useful than a blank page.
+    """
     engine = DatasetEngine()
-    try:
-        if dataset_key == "2025":
-            df_raw = engine.load_dataset(2025, vehicle_mode=vehicle_mode)
-        elif dataset_key == "2026":
-            df_raw = engine.load_dataset(2026, vehicle_mode=vehicle_mode)
+
+    def _try_load(key: str) -> pd.DataFrame:
+        if key == "2025":
+            return engine.load_dataset(2025, vehicle_mode=vehicle_mode)
+        elif key == "2026":
+            return engine.load_dataset(2026, vehicle_mode=vehicle_mode)
+        elif key == "combined":
+            return engine.load_all_datasets(vehicle_mode=vehicle_mode)
         else:
-            df_raw = engine.load_all_datasets(vehicle_mode=vehicle_mode)
+            raise ValueError(f"Unknown dataset key: '{key}'")
+
+    df_raw = pd.DataFrame()
+    actual_key = dataset_key
+    try:
+        df_raw = _try_load(dataset_key)
     except Exception as e:
-        logger.exception(f"DatasetEngine error: {e}")
+        logger.warning(f"Primary dataset '{dataset_key}' failed: {e}. Trying fallback.")
+        fallback_order = [k for k in ["2026", "2025"] if k != dataset_key]
+        for fb_key in fallback_order:
+            try:
+                df_raw = _try_load(fb_key)
+                actual_key = fb_key
+                logger.info(f"Fallback to dataset '{fb_key}' succeeded.")
+                break
+            except Exception as fb_e:
+                logger.warning(f"Fallback '{fb_key}' also failed: {fb_e}")
+
+    if df_raw.empty:
+        logger.error("All dataset loading attempts failed.")
         return pd.DataFrame()
 
-    df = _run_pipeline(df_raw)
-    df.attrs["dataset"]      = dataset_key
+    try:
+        df = _run_pipeline(df_raw)
+    except Exception as e:
+        logger.exception(f"Pipeline processing failed: {e}")
+        return pd.DataFrame()
+
+    # Sanity check: a panel with no valid ev_sales is useless downstream
+    if "ev_sales" not in df.columns or df["ev_sales"].notna().sum() == 0:
+        logger.error("Processed dataset has no valid ev_sales values.")
+        return pd.DataFrame()
+
+    df.attrs["dataset"]      = actual_key
     df.attrs["vehicle_mode"] = vehicle_mode
+    df.attrs["fallback_used"] = actual_key != dataset_key
     return df
 
 
@@ -133,12 +171,26 @@ def _sidebar() -> tuple[str, str, str]:
 def main():
     dataset_key, vehicle_mode, module_name = _sidebar()
 
+    # EV Pulse does not depend on the EV dataset — render it independently
+    # so a data-loading failure never blocks access to the news page.
+    is_pulse = module_name.endswith("07_EV_Pulse")
+
     df = get_data(dataset_key, vehicle_mode)
-    if df is None or df.empty:
+
+    if (df is None or df.empty) and not is_pulse:
         st.error(
-            "No data loaded. Place the IEA CSV files in `data/raw/` and reload."
+            "No EV data loaded. Place the IEA CSV files in `data/raw/` and reload.\n\n"
+            "Expected files:\n"
+            "- `data/raw/EV_Data_Explorer_2025_GEVO_clean.csv`\n"
+            "- `data/raw/EV_Data_Explorer_2026_GEVO_clean.csv`"
         )
         return
+
+    if df is not None and not df.empty and df.attrs.get("fallback_used"):
+        st.info(
+            f"⚠️ The selected dataset could not be loaded — "
+            f"showing **{df.attrs.get('dataset')}** instead."
+        )
 
     try:
         page = importlib.import_module(module_name)
@@ -154,4 +206,3 @@ def main():
 
 if __name__ == "__main__":
     main()
- 
