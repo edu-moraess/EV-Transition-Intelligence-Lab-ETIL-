@@ -5,7 +5,7 @@ import numpy as np
 import plotly.graph_objects as go
 from models.scoring.evqti import EVQTI
 from visualization.theme import (
-    base_layout, bar_color_signed,
+    base_layout, bar_color_signed, chart_config,
     NAVY, NAVY_LIGHT, NAVY_PALE, RED_DARK, GREEN_MED, AMBER, SLATE,
     QUINTIL_COLORS,
 )
@@ -93,7 +93,7 @@ def render(df: pd.DataFrame):
             lay.update({"yaxis": {**lay.get("yaxis",{}), "title": "Rank IC", "range": [-0.40, 0.60]},
                          "showlegend": False})
             fig_ic.update_layout(**lay)
-            st.plotly_chart(fig_ic, use_container_width=True)
+            st.plotly_chart(fig_ic, use_container_width=True, config=chart_config())
 
     with col_b:
         st.markdown("##### Do high-EVQTI countries actually grow faster?")
@@ -116,7 +116,7 @@ def render(df: pd.DataFrame):
             lay2.update({"yaxis": {**lay2.get("yaxis",{}), "title": "Mean next-year growth (%)"},
                           "showlegend": False})
             fig_dec.update_layout(**lay2)
-            st.plotly_chart(fig_dec, use_container_width=True)
+            st.plotly_chart(fig_dec, use_container_width=True, config=chart_config())
 
     st.markdown("---")
 
@@ -151,7 +151,7 @@ def render(df: pd.DataFrame):
             lay_bt.update({"yaxis": {**lay_bt.get("yaxis",{}), "title": "IC (test year)"},
                             "showlegend": False})
             fig_bt.update_layout(**lay_bt)
-            st.plotly_chart(fig_bt, use_container_width=True)
+            st.plotly_chart(fig_bt, use_container_width=True, config=chart_config())
 
             recent_ic = backtest_df["ic_mean"].tail(4).mean()
             early_ic  = backtest_df["ic_mean"].head(4).mean()
@@ -194,7 +194,7 @@ def render(df: pd.DataFrame):
                   "margin": {**lay3.get("margin",{}), "r": 80},
                   "showlegend": False})
     fig_rank.update_layout(**lay3)
-    st.plotly_chart(fig_rank, use_container_width=True)
+    st.plotly_chart(fig_rank, use_container_width=True, config=chart_config())
 
     st.markdown("---")
 
@@ -231,7 +231,7 @@ def render(df: pd.DataFrame):
                   "yaxis": {**lay4.get("yaxis",{}), "title": "Historical CAGR (%)"},
                   "showlegend": False})
     fig_sc.update_layout(**lay4)
-    st.plotly_chart(fig_sc, use_container_width=True)
+    st.plotly_chart(fig_sc, use_container_width=True, config=chart_config())
 
     st.markdown("---")
     st.subheader("Full Table")
