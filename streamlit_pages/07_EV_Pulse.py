@@ -3,7 +3,7 @@
 EV Pulse — live news digest with AI summaries.
 
 Data source : NewsAPI (free tier: 100 req/day, 1,000/month)
-AI summary  : Anthropic API (claude-sonnet-4-6)
+AI summary  : external AI service (optional)
 
 Design for resilience:
   - Every external call wrapped in try/except with a specific user-facing message
@@ -15,6 +15,7 @@ Design for resilience:
 Setup — .streamlit/secrets.toml:
     NEWSAPI_KEY = "your_key_here"
     ANTHROPIC_API_KEY = "your_key_here"   # optional — enables AI summaries
+    (the key name remains as-is for backward compatibility, but it's used generically)
 
 Get a free NewsAPI key at: https://newsapi.org/register
 """
@@ -25,8 +26,7 @@ import requests
 from datetime import datetime, timedelta
 
 _NEWSAPI_URL   = "https://newsapi.org/v2/everything"
-_ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
-_MODEL         = "claude-sonnet-4-6"
+_AI_URL        = "https://api.anthropic.com/v1/messages"   # external AI provider endpoint
 _TIMEOUT_NEWS  = 8
 _TIMEOUT_AI    = 15
 
@@ -105,12 +105,12 @@ _NEWS_ERROR_MESSAGES = {
 }
 
 
-# ── Claude API ────────────────────────────────────────────────────────────────
+# ── AI Summary Service ────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def _claude_summary(title: str, description: str, context: str, api_key: str) -> dict:
+def _ai_summary(title: str, description: str, context: str, api_key: str) -> dict:
     """
-    Generate a concise analytical summary via the Anthropic API.
+    Generate a concise analytical summary via the external AI service.
 
     Returns {"ok": True, "text": "..."} or {"ok": False, "error": "..."}.
     Cached 24h per (title, description, context) — summaries don't change.
@@ -133,14 +133,14 @@ Be direct, factual and analytical. No hype, no bullet points, no preamble."""
 
     try:
         resp = requests.post(
-            _ANTHROPIC_URL,
+            _AI_URL,
             headers={
                 "Content-Type":      "application/json",
                 "x-api-key":         api_key,
-                "anthropic-version": "2023-06-01",
+                "anthropic-version": "2023-06-01",   # required by the provider
             },
             json={
-                "model":      _MODEL,
+                "model":      "claude-sonnet-4-6",   # provider-specific model
                 "max_tokens": 300,
                 "messages":   [{"role": "user", "content": prompt}],
             },
@@ -174,12 +174,12 @@ Be direct, factual and analytical. No hype, no bullet points, no preamble."""
 
 
 _AI_ERROR_MESSAGES = {
-    "no_key":      "AI summaries disabled — no Anthropic API key configured.",
+    "no_key":      "AI summaries disabled — no AI API key configured.",
     "timeout":     "AI summary timed out.",
-    "connection":  "Could not reach Anthropic API.",
-    "invalid_key": "Anthropic API key was rejected.",
+    "connection":  "Could not reach the AI service.",
+    "invalid_key": "AI API key was rejected.",
     "rate_limited":"AI summary rate limit reached — showing headline only.",
-    "overloaded":  "Anthropic API temporarily overloaded — showing headline only.",
+    "overloaded":  "AI service temporarily overloaded — showing headline only.",
     "empty_response": "AI returned an empty summary.",
 }
 
@@ -190,12 +190,12 @@ def render(df: pd.DataFrame = None):
     st.markdown("## ⚡ EV Pulse")
     st.markdown(
         "Live news digest — EV market headlines with AI-generated analysis. "
-        "Stories are pulled from global news sources and summarised by Claude."
+        "Stories are pulled from global news sources and summarised by AI."
     )
     st.markdown("---")
 
     news_key = _get_secret("NEWSAPI_KEY")
-    ai_key   = _get_secret("ANTHROPIC_API_KEY")
+    ai_key   = _get_secret("ANTHROPIC_API_KEY")   # key name kept for compatibility
 
     if not news_key:
         st.warning(
@@ -212,7 +212,7 @@ def render(df: pd.DataFrame = None):
             "infrastructure and technology\n"
             "- **Country feed** — news filtered by country\n"
             "- **AI summaries** — each article gets a 2-3 sentence analytical "
-            "summary from Claude, focused on market implications\n"
+            "summary from an AI model, focused on market implications\n"
         )
         return
 
@@ -236,7 +236,7 @@ def render(df: pd.DataFrame = None):
 
     ai_available = bool(ai_key)
     ai_on = st.toggle(
-        "Generate AI summaries" + ("" if ai_available else " (requires Anthropic API key)"),
+        "Generate AI summaries" + ("" if ai_available else " (requires AI API key)"),
         value=ai_available,
         disabled=not ai_available,
     )
@@ -284,13 +284,11 @@ def render(df: pd.DataFrame = None):
 
             if ai_on:
                 context = f"Query was '{query}'. Source: {source}. Focus on EV market implications."
-                summary_result = _claude_summary(title, desc, context, ai_key)
+                summary_result = _ai_summary(title, desc, context, ai_key)
                 if summary_result["ok"]:
                     st.success(f"📊 **Analysis:** {summary_result['text']}")
                 else:
                     ai_failures += 1
-                    # Only show the error inline for the first failure to avoid noise;
-                    # repeated identical failures (e.g. rate limit) are summarised once below.
                     if ai_failures == 1:
                         err_msg = _AI_ERROR_MESSAGES.get(
                             summary_result["error"], summary_result["error"]
