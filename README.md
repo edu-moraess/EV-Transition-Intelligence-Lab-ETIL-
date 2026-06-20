@@ -2,50 +2,68 @@
 
 Institutional quantitative platform for global EV transition analysis.
 
-**Data source:** IEA Global EV Outlook 2025 · 2026 · IEA Energy Prices 2026  
-**Deploy:** [quantev.streamlit.app](https://quantev.streamlit.app)  
-**Author:** [Carlos Eduardo](https://www.linkedin.com/in/carlos-eduardo-2753a92b5) · [GitHub](https://github.com/edu-moraess)
+**Live app:** [quantev.streamlit.app](https://quantev.streamlit.app)  
+**Author:** [Carlos Eduardo](https://www.linkedin.com/in/carlos-eduardo-2753a92b5) · [GitHub](https://github.com/edu-moraess)  
+**Data sources:** IEA Global EV Outlook 2025/2026 · IEA Energy Prices 2026 · NewsAPI
 
 ---
 
-## Overview
+## What this is
 
-ETIL combines technology diffusion models, regime detection and a proprietary quantitative factor — the **EVQTI** — to map the EV transition stage of 60+ countries with institutional-grade statistical rigour.
+ETIL tracks the global shift to electric vehicles across 60+ countries — where it's happening, how fast, and what the data says about where it's going next.
 
-Core premise: **future growth concentrates in markets that have not yet arrived, not in those that already have.** The EVQTI operationalises Bass diffusion law into a measurable, anti-leakage, empirically validated factor.
+The platform combines diffusion models, regime detection, quantitative factor analysis and a live news digest into a single research environment. It is designed to be both analytically rigorous and readable by anyone with an interest in energy transition.
+
+---
+
+## Pages
+
+| Page | What it answers |
+|---|---|
+| 🌍 **Global Monitor** | Where is EV adoption happening and who is growing fastest? |
+| 🔬 **Country Lab** | Deep-dive into any country — history, diffusion curve, fuel price context and adoption regime |
+| 🧠 **Diffusion Engine** | Where is a country on the S-curve? Bass, Logistic and Gompertz models with R², AIC, BIC |
+| 🔄 **Regime Detection** | Is a market Emerging, Expanding, Accelerating or Maturing? GMM + Bayesian Changepoint |
+| 📊 **Forecast Lab** | Probabilistic 10-year forecast with 80/95% confidence intervals via Gaussian Process + Monte Carlo |
+| 🏆 **EVQTI Ranking** | Which early-stage markets are most likely to grow fastest next year? Full statistical validation |
+| 📰 **EV Pulse** | Live news digest with AI-generated analytical summaries (requires NewsAPI key) |
 
 ---
 
 ## Production results — EVQTI v3 (IEA 2026, Cars)
 
-| Metric | Value | Interpretation |
+| Metric | Value | What it means |
 |---|---|---|
-| Mean Rank IC | **+0.237** | Robust signal — utility threshold is 0.10 |
-| Information Ratio (IR) | **0.99** | IR > 0.5 = consistent over time |
-| % years IC > 0 | **93%** | Signal fails in fewer than 1 in 14 years |
-| Q5-Q1 spread | **+122pp** | Growth difference between top and bottom quintile |
-| Monotonic quintiles | ✅ | Q1=49% → Q2=87% → Q3=106% → Q4=122% → Q5=171% |
+| Mean Rank IC | **+0.237** | Strong predictive signal — threshold for "robust" is 0.10 |
+| Information Ratio | **0.99** | Consistent signal across time — IR > 0.5 is the target |
+| Years with positive IC | **93%** | Signal points in the right direction in 13 out of 14 years |
+| Q5-Q1 growth spread | **+122pp** | Top-quintile countries grew 122pp faster than bottom-quintile |
+| Quintile monotonicity | ✅ | Q1=49% → Q2=87% → Q3=106% → Q4=122% → Q5=171% |
 
 ---
 
 ## Project structure
 
 ```
-├── app.py                        # Entry point — routing and pipeline
+├── app.py                          # Entry point — routing, data pipeline, dataset fallback
 ├── requirements.txt
+├── .gitignore
+│
 ├── .streamlit/
-│   └── config.toml               # Light theme — navy #1f3a6e
+│   ├── config.toml                 # Light theme, navy #1f3a6e
+│   └── secrets.toml                # API keys — never commit (see EV Pulse setup)
 │
 ├── data/
-│   ├── fuel_loader.py            # IEA Energy Prices loader (33 countries)
+│   ├── fuel_loader.py              # IEA Energy Prices — 33 countries, cached, fault-tolerant
 │   └── raw/
 │       ├── EV_Data_Explorer_2025_GEVO_clean.csv
 │       ├── EV_Data_Explorer_2026_GEVO_clean.csv
 │       └── fuel_prices_iea.csv
 │
 ├── ingestion/
-│   ├── dataset_engine.py         # Multi-dataset: 2025 / 2026 / combined
-│   └── loader.py
+│   ├── loader.py                   # IEALoader — validates, loads, delegates to Aggregator
+│   ├── aggregator.py               # Correct dimensional aggregation, no double-counting
+│   └── dataset_engine.py           # Legacy compatibility layer
 │
 ├── preprocessing/
 │   ├── cleaning.py
@@ -53,11 +71,11 @@ Core premise: **future growth concentrates in markets that have not yet arrived,
 │   └── features.py
 │
 ├── models/
-│   ├── diffusion/                # Bass · Logistic · Gompertz (with R²)
-│   ├── forecasting/              # Gaussian Process + Monte Carlo (80/95% CI)
-│   ├── regimes/                  # GMM + Bayesian Changepoint
+│   ├── diffusion/                  # Bass · Logistic · Gompertz
+│   ├── forecasting/                # Gaussian Process + Monte Carlo (80/95% CI)
+│   ├── regimes/                    # GMM + Bayesian Changepoint
 │   └── scoring/
-│       └── evqti.py              # EVQTI v3 — IC-calibrated weights
+│       └── evqti.py                # EVQTI v3 — IC-calibrated, anti-leakage
 │
 ├── analytics/
 │   ├── country_analysis.py
@@ -65,7 +83,7 @@ Core premise: **future growth concentrates in markets that have not yet arrived,
 │   └── scenario_engine.py
 │
 ├── visualization/
-│   └── theme.py                  # Centralised quant palette — dark/light safe
+│   └── theme.py                    # Centralised palette — dark/light mode safe
 │
 └── streamlit_pages/
     ├── 01_Global_Monitor.py
@@ -73,74 +91,102 @@ Core premise: **future growth concentrates in markets that have not yet arrived,
     ├── 03_Diffusion_Engine.py
     ├── 04_Regime_Detection.py
     ├── 05_Forecast_Lab.py
-    └── 06_EVQTI_Ranking.py
+    ├── 06_EVQTI_Ranking.py
+    └── 07_EV_Pulse.py              # NewsAPI + Claude AI summaries, cached and fault-tolerant
 ```
-
----
-
-## Pages
-
-| Page | Description |
-|---|---|
-| 🌍 Global Monitor | EV stock share map, global KPIs, time series, top 10 countries |
-| 🔬 Country Lab | EV history, YoY, stock share, diffusion models, regimes, **fuel price context** |
-| 🧠 Diffusion Engine | Bass / Logistic / Gompertz with R², AIC, BIC, multi-country comparison |
-| 🔄 Regime Detection | GMM regime probabilities + Bayesian Changepoint |
-| 📊 Forecast Lab | Gaussian Process + Monte Carlo with 80/95% CI, percentile table |
-| 🏆 EVQTI Ranking | IC, Rank IC, t-stat, IR, quintile analysis, full ranking |
 
 ---
 
 ## EVQTI v3 — EV Quant Transition Index
 
-### Economic rationale
+### The intuition
 
-Countries in the early stage of EV diffusion — low current penetration with latent demand — concentrate the highest future growth. This is Bass diffusion law applied to the country cross-section: saturated markets grow slower; emerging markets grow faster.
+Norway and the Netherlands are global EV leaders. But they rank *low* on EVQTI. Why?
 
-### Factor construction (anti-leakage)
+Because their markets are maturing. When 35%+ of all cars on the road are already electric, growth naturally slows — there are fewer internal combustion car owners left to convert.
 
-Signal computed with lagged features (t-1). Target is EV growth at t+1.
+Countries like Brazil, Indonesia and South Africa rank *high* on EVQTI. They have low penetration today but are already accelerating. Early-stage markets grow faster. This is Bass diffusion law applied to the country cross-section.
+
+### The maths
+
+Signal built at t-1. Target: EV growth at t+1. No future information leaks in.
 
 | Feature (t-1) | Direction | Weight | Empirical IC |
 |---|---|---|---|
-| ev_stock_share | Negative (early-stage) | **48.5%** | −0.259 (p<0.001) |
-| ev_sales_share | Negative (early-stage) | **51.5%** | −0.275 (p<0.001) |
+| EV stock share | Negative — lower = earlier stage | **48.5%** | −0.259 (p<0.001) |
+| EV sales share | Negative — lower = earlier stage | **51.5%** | −0.275 (p<0.001) |
 
-> `growth_rate_lag1` excluded: IC = −0.037, p = 0.36 — not statistically significant.
+Growth rate was tested and excluded: IC = −0.037, p = 0.36 — no cross-country predictive power.
 
 ### Normalisation pipeline
 
 1. Winsorise features at 1%–99%
 2. Create lags (t-1) on winsorised values
 3. Re-winsorise lags at their own P1/P99
-4. Cross-section z-score per year
+4. Z-score cross-section per year
 5. Score = −(w₁·z₁ + w₂·z₂)
 6. Winsorise target at 5%–95%
 
-### Validation metrics
+### Validation
 
-| Metric | Formula | Threshold |
+| Metric | Formula | Result |
 |---|---|---|
-| Rank IC | Spearman(EVQTI, growth_t+1) | > 0.10 = robust |
-| t-stat | IC · √(n−2) / √(1−IC²) | — |
-| IR | IC_mean / σ(IC) | > 0.5 = consistent |
-| Spread Q5-Q1 | Δ growth between quintiles | — |
+| Rank IC | Spearman(EVQTI, growth_t+1) | +0.237 |
+| t-stat | IC · √(n−2) / √(1−IC²) | Significant in 36% of years |
+| IR | IC_mean / σ(IC) | 0.99 |
+| Spread Q5-Q1 | Δ growth between quintiles | +122pp |
 
 ---
 
-## Fuel price context (Country Lab)
+## Aggregation rules — no double-counting
 
-Integrated for 33 countries via IEA Energy Prices Monthly Excerpt (Jun 2026).
+IEA provides EV sales at two levels. Never mix them.
 
-| Metric | Description |
+```
+IEA 2026 has:  powertrain = 'EV'            (aggregate: BEV + PHEV + FCEV)
+               powertrain = 'BEV'/'PHEV'... (individual components)
+
+WRONG:  Total = EV + BEV + PHEV   ← double-counts
+RIGHT:  Total = EV                ← use aggregate only
+   or:  Total = BEV + PHEV + FCEV ← use components only
+
+IEA 2025 has no 'EV' aggregate in EV sales → use BEV + PHEV + FCEV.
+```
+
+Primary key: `country × category × year × parameter × mode × powertrain`
+
+---
+
+## Fuel price context
+
+IEA Energy Prices Monthly Excerpt (Jun 2026) — end-user prices including taxes.
+
+| Coverage | 33 countries · Jan 2015 – May 2026 · USD/litre |
 |---|---|
-| Gasoline price | Latest USD/litre (end-user, taxes included) |
-| Diesel price | Latest USD/litre |
-| Gasoline YoY | Year-on-year price change (%) |
-| Fuel volatility | Annualised std dev of monthly gasoline returns (last 12 months) |
+| Products | Gasoline · Diesel |
+| Exclusions | Ukraine (insufficient data coverage) |
 
-Displayed as a dual-axis chart overlaying monthly fuel prices with annual EV sales.  
-Ukraine excluded: insufficient data coverage.
+Available in Country Lab for all 33 covered countries as a dual-axis chart overlaying monthly fuel prices with annual EV sales.
+
+**Fault tolerance:** the loader validates required columns, parses dates defensively (`errors="coerce"`), and returns an empty DataFrame on any malformed input rather than crashing the page. Cached for 1 hour via `@st.cache_data`.
+
+---
+
+## EV Pulse setup
+
+EV Pulse requires a free NewsAPI key (100 requests/day).
+
+**Step 1** — Get a key at [newsapi.org/register](https://newsapi.org/register)
+
+**Step 2** — Add to `.streamlit/secrets.toml`:
+```toml
+NEWSAPI_KEY = "your_key_here"
+ANTHROPIC_API_KEY = "your_key_here"   # optional — enables AI summaries
+```
+
+**Step 3** — On Streamlit Cloud: App Settings → Secrets → paste the same content.
+
+**Resilience:** news results are cached for 1 hour and AI summaries for 24 hours, protecting the free-tier quota. Every failure mode (timeout, invalid key, rate limit, connection error) surfaces a specific, human-readable message instead of a generic error or a blank page. If only the Anthropic key is missing, headlines still display — AI summaries degrade gracefully rather than blocking the page.
 
 ---
 
@@ -148,27 +194,11 @@ Ukraine excluded: insufficient data coverage.
 
 | Mode | Countries | Coverage | IEA schema |
 |---|---|---|---|
-| IEA 2026 | 63 | 2010–2025 | powertrain = `EV` (aggregated) |
+| IEA 2026 | 63 | 2010–2025 | powertrain = `EV` (aggregate) |
 | IEA 2025 | 54 | 2010–2024 | powertrain = `BEV / PHEV / FCEV` |
 | Combined | 63 | 2010–2025 | 2026 takes priority on overlaps |
 
-Schema auto-detected via presence of `EV` in `EV sales` records.
-
----
-
-## Design system
-
-All colours defined in `visualization/theme.py` and imported by all pages.  
-No hex codes hardcoded in individual page files.  
-Legend and font colours are transparent / inherited — compatible with both light and dark mode.
-
-| Element | Colour | Use |
-|---|---|---|
-| Primary / positive | `#1f3a6e` navy | Bars, main lines, ranking |
-| Negative / alert | `#8b1a1a` dark red | Negative IC, negative growth |
-| Momentum | `#b7770d` amber | Changepoints, moderate alerts |
-| Positive soft | `#1a4731` dark green | Growth, acceleration regimes |
-| Secondary text | `#4a4a4a` slate | Labels, annotations |
+**Automatic fallback:** if the selected dataset fails to load (missing or corrupted file), `app.py` automatically falls back to the other available year and notifies the user with an inline message — a partial dataset is always preferred over a blank page.
 
 ---
 
@@ -178,34 +208,36 @@ Legend and font colours are transparent / inherited — compatible with both lig
 git clone https://github.com/edu-moraess/EV-Transition-Intelligence-Lab-ETIL-
 cd EV-Transition-Intelligence-Lab-ETIL-
 pip install -r requirements.txt
+
+# Add your API keys (see EV Pulse setup above)
+# Edit .streamlit/secrets.toml with your keys
+
 streamlit run app.py
 ```
-
-Data files must be placed in `data/raw/`.
 
 ---
 
 ## Dependencies
 
 ```
-streamlit>=1.28.0   pandas>=2.2.0       numpy>=1.26.0
-scipy>=1.11.0       scikit-learn>=1.3.0  plotly>=5.18.0
-statsmodels>=0.14.0 openpyxl>=3.1.0
+streamlit>=1.28.0    pandas>=2.2.0       numpy>=1.26.0
+scipy>=1.11.0        scikit-learn>=1.3.0  plotly>=5.18.0
+statsmodels>=0.14.0  openpyxl>=3.1.0     requests>=2.31.0
 ```
 
-> `hmmlearn` removed — incompatible with Python 3.14.  
-> Regime detection uses `GaussianMixture` (scikit-learn) with equivalent interface.
+`hmmlearn` removed — incompatible with Python 3.14. Regime detection uses `GaussianMixture` (scikit-learn).
 
 ---
 
-## Author
+## License
 
-**Carlos Eduardo**  
-Quant Data Scientist · Edumetria
+MIT License — see [LICENSE](LICENSE).  
+IEA data © OECD/IEA. Used for non-commercial research only.  
+EVQTI is a research construct, not financial advice.
 
+---
+
+**Carlos Eduardo** · Quant Data Scientist · Edumetria  
 [LinkedIn](https://www.linkedin.com/in/carlos-eduardo-2753a92b5) · [GitHub](https://github.com/edu-moraess) · [App](https://quantev.streamlit.app)
 
----
-
-*Source: IEA Global EV Outlook 2025/2026 · IEA Energy Prices 2026*  
-*Models: GMM · GP · Bass · Monte Carlo · EVQTI*
+*IEA Global EV Outlook 2025/2026 · IEA Energy Prices 2026 · Models: GMM · GP · Bass · Monte Carlo · EVQTI*
