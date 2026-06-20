@@ -23,6 +23,7 @@ Annual aggregation (for cross-country EV vs fuel comparison):
 
 import pandas as pd
 import numpy as np
+import streamlit as st
 from pathlib import Path
 from utils.logger import setup_logger
 
@@ -32,6 +33,7 @@ _FUEL_PATH   = Path(__file__).parent / "raw" / "fuel_prices_iea.csv"
 _EXCLUDE     = {"Ukraine"}   # insufficient data coverage
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_fuel_prices() -> pd.DataFrame:
     """
     Load and clean the IEA fuel price CSV.
@@ -41,14 +43,36 @@ def load_fuel_prices() -> pd.DataFrame:
     pd.DataFrame
         Columns: date, country, diesel_usd, gasoline_usd
         Sorted by (country, date). Ukraine excluded.
+        Empty DataFrame if the file is missing or malformed —
+        callers must handle the empty case (all functions below already do).
     """
     if not _FUEL_PATH.exists():
         logger.warning(f"Fuel price file not found: {_FUEL_PATH}")
         return pd.DataFrame()
 
-    df = pd.read_csv(_FUEL_PATH)
+    try:
+        df = pd.read_csv(_FUEL_PATH)
+    except (pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+        logger.error(f"Fuel price CSV is malformed: {e}")
+        return pd.DataFrame()
+
+    required_cols = {"date", "country", "diesel_usd", "gasoline_usd"}
     df.columns = [c.lower() for c in df.columns]
-    df["date"] = pd.to_datetime(df["date"])
+    if not required_cols.issubset(set(df.columns)):
+        missing = required_cols - set(df.columns)
+        logger.error(f"Fuel price CSV missing columns: {missing}")
+        return pd.DataFrame()
+    try:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    except Exception as e:
+        logger.error(f"Fuel price CSV has unparseable dates: {e}")
+        return pd.DataFrame()
+
+    df = df.dropna(subset=["date"])
+    if df.empty:
+        logger.error("Fuel price CSV has no valid dates after parsing.")
+        return pd.DataFrame()
+
     df = df[~df["country"].isin(_EXCLUDE)].copy()
     df = df.sort_values(["country", "date"]).reset_index(drop=True)
     logger.info(
@@ -148,4 +172,3 @@ def covered_countries() -> list:
     """Return sorted list of countries with fuel price data."""
     df = load_fuel_prices()
     return sorted(df["country"].unique().tolist()) if not df.empty else []
- 
