@@ -1,31 +1,46 @@
-# Python
+# .gitignore — ETIL
+
+# ── Secrets — NEVER commit ────────────────────────────────────────────────────
+.streamlit/secrets.toml
+
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-*.so
+*.pyo
+*.pyd
 .Python
-env/
-venv/
-.venv/
 *.egg-info/
 dist/
 build/
+*.egg
+.eggs/
 
-# Data
-data/raw/*.xlsx
-data/raw/*.csv
-data/processed/
-data/external/
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
 
-# Streamlit
-.streamlit/
+# ── Data cache ────────────────────────────────────────────────────────────────
+data/cache/
+*.feather
+*.parquet
 
-# IDE
+# ── IDE ───────────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Logs
-logs/
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
 *.log
+logs/
 
-# Outputs
-outputs/
+# ── Testing ───────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
