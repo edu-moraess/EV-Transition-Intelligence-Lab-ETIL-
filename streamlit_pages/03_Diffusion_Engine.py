@@ -4,9 +4,9 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from models.diffusion import BassDiffusion, LogisticGrowth, GompertzModel
-from visualization.theme import chart_config, base_layout, NAVY, AMBER, SLATE
+from visualization.theme import chart_config, base_layout, NAVY, GREEN_DARK, RED_DARK, NAVY_LIGHT, AMBER, SLATE
 
-_COLORS = {"Bass": NAVY, "Logistic": "#2e7d32", "Gompertz": AMBER}
+_COLORS = {"Bass": NAVY, "Logistic": GREEN_DARK, "Gompertz": AMBER}
 
 
 def render(df: pd.DataFrame):
@@ -151,7 +151,7 @@ def render(df: pd.DataFrame):
         max_selections=4,
     )
     if compare:
-        palette = [NAVY, "#2e7d32", AMBER, "#8b1a1a", "#2e5090"]
+        palette = [NAVY, GREEN_DARK, AMBER, RED_DARK, NAVY_LIGHT]
         fig_cmp = go.Figure()
         for ci, ctry in enumerate([selected] + compare):
             d_c = df[df["country"] == ctry].sort_values("year")
