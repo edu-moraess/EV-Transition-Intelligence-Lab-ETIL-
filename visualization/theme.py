@@ -8,36 +8,41 @@ Rules:
   - Legend background transparent → no white box in dark mode
   - Gridlines use rgba neutral → visible in both modes
   - Backgrounds always rgba(0,0,0,0) → Streamlit controls the page colour
+  - Palette is saturated/vibrant (vs the earlier muted "private bank" tones)
+    while still reading cleanly on a light background — no neon-on-black,
+    since the app stays on Streamlit's native light theme by design.
 """
 
 # ── Brand palette ─────────────────────────────────────────────────────────────
-NAVY        = "#1f3a6e"
-NAVY_LIGHT  = "#2e5090"
-NAVY_PALE   = "#c8d4e8"
-RED_DARK    = "#8b1a1a"
-RED_MED     = "#c0392b"
-GREEN_DARK  = "#1a4731"
-GREEN_MED   = "#27ae60"
-AMBER       = "#b7770d"
-SLATE       = "#4a4a4a"
+NAVY        = "#1551d1"   # vibrant royal blue (was muted #1f3a6e)
+NAVY_LIGHT  = "#3b82f6"   # bright electric blue accent
+NAVY_PALE   = "#bfdbfe"
+RED_DARK    = "#dc2626"   # saturated red (was muted #8b1a1a)
+RED_MED     = "#ef4444"
+GREEN_DARK  = "#15803d"
+GREEN_MED   = "#16a34a"   # vivid green (was muted #27ae60)
+AMBER       = "#f59e0b"   # vibrant amber/gold (was muted #b7770d) — echoes the
+                           # gold-miners yellow used as an accent colour
+GOLD        = "#eab308"   # high-impact gold accent for highlight lines/markers
+SLATE       = "#475569"
 WHITE       = "#ffffff"
-BORDER      = "rgba(128,128,128,0.2)"
+BORDER      = "rgba(100,116,139,0.25)"
 
 # ── Colour sequences ──────────────────────────────────────────────────────────
 SEQ_MAP = [
-    [0.0,  "#f8f9fb"],
-    [0.15, "#c8d4e8"],
-    [0.35, "#8aa2c8"],
-    [0.60, "#4d6ea8"],
-    [0.80, "#2e5090"],
-    [1.0,  "#1f3a6e"],
+    [0.0,  "#eff6ff"],
+    [0.15, "#bfdbfe"],
+    [0.35, "#60a5fa"],
+    [0.60, "#3b82f6"],
+    [0.80, "#1d4ed8"],
+    [1.0,  "#1551d1"],
 ]
 
-QUINTIL_COLORS = ["#c0392b", "#e67e22", "#f1c40f", "#2ecc71", "#1f3a6e"]
+QUINTIL_COLORS = ["#dc2626", "#f59e0b", "#eab308", "#16a34a", "#1551d1"]
 
 DIFF_COLORS = {
     "Bass":     NAVY,
-    "Logistic": "#2e7d32",
+    "Logistic": "#15803d",
     "Gompertz": AMBER,
 }
 
