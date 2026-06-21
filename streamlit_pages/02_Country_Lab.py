@@ -10,10 +10,10 @@ from data.fuel_loader import get_fuel_summary, get_monthly_fuel, covered_countri
 from data.world_bank_client import get_country_fundamentals, get_fundamentals_score
 from visualization.theme import (
     base_layout, bar_color_signed, chart_config,
-    NAVY, NAVY_LIGHT, RED_DARK, GREEN_MED, AMBER, SLATE
+    NAVY, NAVY_LIGHT, RED_DARK, GREEN_DARK, GREEN_MED, AMBER, SLATE
 )
 
-_DIFF_COLORS  = {"Bass": NAVY, "Logistic": "#2e7d32", "Gompertz": AMBER}
+_DIFF_COLORS  = {"Bass": NAVY, "Logistic": GREEN_DARK, "Gompertz": AMBER}
 _REGIME_COLORS = {0: SLATE, 1: NAVY_LIGHT, 2: GREEN_MED, 3: AMBER}
 _REGIME_LABELS = {0: "Emerging", 1: "Expansion", 2: "Acceleration", 3: "Maturity"}
 
