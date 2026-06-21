@@ -182,7 +182,7 @@ def render(df: pd.DataFrame):
 
     fig_rank = go.Figure(go.Bar(
         x=top_n["evqti_score"], y=top_n["country"], orientation="h",
-        marker=dict(color=norm, colorscale=[[0,"#c8d4e8"],[0.5,"#4d6ea8"],[1.0,NAVY]],
+        marker=dict(color=norm, colorscale=[[0,NAVY_PALE],[0.5,NAVY_LIGHT],[1.0,NAVY]],
                     showscale=False),
         text=top_n["evqti_score"].map(lambda v: f"{v:.3f}"),
         textposition="outside", textfont=dict(size=9),
@@ -219,7 +219,7 @@ def render(df: pd.DataFrame):
         marker=dict(
             size=sc_df["ev_sales_log"] * 3,
             color=sc_df["evqti_score"],
-            colorscale=[[0,"#c8d4e8"],[0.5,"#4d6ea8"],[1.0,NAVY]],
+            colorscale=[[0,NAVY_PALE],[0.5,NAVY_LIGHT],[1.0,NAVY]],
             showscale=True, colorbar=dict(title="EVQTI", thickness=10, len=0.6),
             line=dict(width=0.5, color="white"), opacity=0.85,
         ),
