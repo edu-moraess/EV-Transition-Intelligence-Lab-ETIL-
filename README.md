@@ -283,4 +283,4 @@ EVQTI and ETII are research constructs, not financial advice.
 **Carlos Eduardo** · Quant Data Scientist · Edumetria  
 [LinkedIn](https://www.linkedin.com/in/carlos-eduardo-2753a92b5) · [GitHub](https://github.com/edu-moraess) · [App](https://quantev.streamlit.app)
 
-*IEA GEVO 2025/2026 · IEA Energy Prices 2026 · World Bank API · Models: GMM · GP · Bass · Monte Carlo · EVQTI · ETII*
+*IEA GEVO 2025/2026 · IEA Energy Prices 2026 · World Bank API · Models: GMM · GP · Bass · Monte Carlo · EVQTI · ETII* 
