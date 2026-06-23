@@ -142,13 +142,16 @@ def _sidebar() -> tuple[str, str, str]:
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Navigation")
     pages = {
-        "🌍 Global Monitor":   "streamlit_pages.01_Global_Monitor",
-        "🔬 Country Lab":      "streamlit_pages.02_Country_Lab",
-        "🧠 Diffusion Engine": "streamlit_pages.03_Diffusion_Engine",
-        "🔄 Regime Detection": "streamlit_pages.04_Regime_Detection",
-        "📊 Forecast Lab":     "streamlit_pages.05_Forecast_Lab",
-        "🏆 EVQTI Ranking":    "streamlit_pages.06_EVQTI_Ranking",
-        "📰 EV Pulse":         "streamlit_pages.07_EV_Pulse",
+        "🌍 Global Monitor":       "streamlit_pages.01_Global_Monitor",
+        "🔬 Country Lab":          "streamlit_pages.02_Country_Lab",
+        "🧠 Diffusion Engine":     "streamlit_pages.03_Diffusion_Engine",
+        "🔄 Regime Detection":     "streamlit_pages.04_Regime_Detection",
+        "📊 Forecast Lab":         "streamlit_pages.05_Forecast_Lab",
+        "🏆 EVQTI Ranking":        "streamlit_pages.06_EVQTI_Ranking",
+        "📰 EV Pulse":             "streamlit_pages.07_EV_Pulse",
+        "🔌 Infrastructure":       "streamlit_pages.08_Infrastructure",
+        "🎯 Scenarios":            "streamlit_pages.09_Scenarios",
+        "🌐 ETII Composite Index": "streamlit_pages.10_ETII",
     }
     selection = st.sidebar.radio("", list(pages.keys()), key="nav_radio")
 
@@ -171,13 +174,12 @@ def _sidebar() -> tuple[str, str, str]:
 def main():
     dataset_key, vehicle_mode, module_name = _sidebar()
 
-    # EV Pulse does not depend on the EV dataset — render it independently
-    # so a data-loading failure never blocks access to the news page.
-    is_pulse = module_name.endswith("07_EV_Pulse")
+    # EV Pulse and Infrastructure do not depend on the EV dataset
+    is_independent = module_name.endswith(("07_EV_Pulse", "08_Infrastructure"))
 
     df = get_data(dataset_key, vehicle_mode)
 
-    if (df is None or df.empty) and not is_pulse:
+    if (df is None or df.empty) and not is_independent:
         st.error(
             "No EV data loaded. Place the IEA CSV files in `data/raw/` and reload.\n\n"
             "Expected files:\n"
@@ -186,7 +188,7 @@ def main():
         )
         return
 
-    if df is not None and not df.empty and df.attrs.get("fallback_used"):
+    if not is_independent and df is not None and not df.empty and df.attrs.get("fallback_used"):
         st.info(
             f"⚠️ The selected dataset could not be loaded — "
             f"showing **{df.attrs.get('dataset')}** instead."
