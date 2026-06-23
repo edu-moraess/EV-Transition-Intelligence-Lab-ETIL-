@@ -153,24 +153,65 @@ def render(df: pd.DataFrame):
         fig2.update_layout(**lay2)
         st.plotly_chart(fig2, use_container_width=True, config=chart_config())
 
-    # ── Stock share ───────────────────────────────────────────────────────────
-    if "ev_stock_share" in data.columns and data["ev_stock_share"].notna().any():
-        st.markdown(
-            "**EV stock share** shows what percentage of all cars on the road are electric. "
-            "It rises more slowly than sales — it takes years for the fleet to turn over."
-        )
-        fig3 = go.Figure(go.Scatter(
-            x=data["year"], y=data["ev_stock_share"],
-            mode="lines+markers",
-            line=dict(color=NAVY, width=2.5),
-            marker=dict(size=6, color=NAVY),
-            fill="tozeroy", fillcolor="rgba(31,58,110,0.07)",
-            hovertemplate="%{x}: %{y:.1f}% EV stock share<extra></extra>",
-        ))
-        lay3 = base_layout(220, "EV Stock Share (%)")
-        lay3.update({"yaxis": {**lay3.get("yaxis",{}), "title": "% of fleet"}, "showlegend": False})
-        fig3.update_layout(**lay3)
-        st.plotly_chart(fig3, use_container_width=True, config=chart_config())
+    # ── Stock share + Sales share ──────────────────────────────────────────────
+    col_share1, col_share2 = st.columns(2)
+    latest_yr = int(data["year"].max())
+
+    with col_share1:
+        if "ev_stock_share" in data.columns and data["ev_stock_share"].notna().any():
+            world_avg_stock = df[df["year"] == latest_yr]["ev_stock_share"].mean() if "ev_stock_share" in df.columns else None
+            st.markdown(
+                "**EV stock share** — % of the total vehicle fleet that is electric. "
+                "Rises slowly as it takes years for the fleet to turn over."
+            )
+            fig3 = go.Figure()
+            fig3.add_trace(go.Scatter(
+                x=data["year"], y=data["ev_stock_share"],
+                mode="lines+markers", name=selected,
+                line=dict(color=NAVY, width=2.5),
+                marker=dict(size=6, color=NAVY),
+                fill="tozeroy", fillcolor="rgba(21,81,209,0.07)",
+                hovertemplate="%{x}: %{y:.1f}% stock share<extra></extra>",
+            ))
+            if world_avg_stock:
+                fig3.add_hline(y=world_avg_stock, line_dash="dot",
+                               line_color=AMBER, line_width=1.5,
+                               annotation_text=f"World avg {world_avg_stock:.1f}%",
+                               annotation_font_size=9)
+            lay3 = base_layout(240, "EV Stock Share (%)")
+            lay3.update({"yaxis": {**lay3.get("yaxis",{}), "title": "% of fleet"},
+                          "showlegend": False})
+            fig3.update_layout(**lay3)
+            st.plotly_chart(fig3, use_container_width=True, config=chart_config())
+
+    with col_share2:
+        if "ev_sales_share" in data.columns and data["ev_sales_share"].notna().any():
+            world_avg_sales_share = df[df["year"] == latest_yr]["ev_sales_share"].mean() if "ev_sales_share" in df.columns else None
+            st.markdown(
+                "**EV sales share** — of every 100 **new cars** sold this year, how many are electric? "
+                "This is the most actionable metric for tracking the transition speed."
+            )
+            fig_ss = go.Figure()
+            fig_ss.add_trace(go.Scatter(
+                x=data["year"], y=data["ev_sales_share"],
+                mode="lines+markers", name=selected,
+                line=dict(color=GREEN_MED, width=2.5),
+                marker=dict(size=6, color=GREEN_MED),
+                fill="tozeroy", fillcolor="rgba(22,163,74,0.07)",
+                hovertemplate="%{x}: %{y:.1f}% of new cars are EV<extra></extra>",
+            ))
+            if world_avg_sales_share:
+                fig_ss.add_hline(y=world_avg_sales_share, line_dash="dot",
+                                  line_color=AMBER, line_width=1.5,
+                                  annotation_text=f"World avg {world_avg_sales_share:.1f}%",
+                                  annotation_font_size=9)
+            lay_ss = base_layout(240, "EV Sales Share (% of new cars)")
+            lay_ss.update({"yaxis": {**lay_ss.get("yaxis",{}), "title": "% of new car sales"},
+                            "showlegend": False})
+            fig_ss.update_layout(**lay_ss)
+            st.plotly_chart(fig_ss, use_container_width=True, config=chart_config())
+        elif "ev_stock_share" not in data.columns or not data["ev_stock_share"].notna().any():
+            st.info("EV share data not available for this country/dataset.")
 
     # ── Momentum & Acceleration ───────────────────────────────────────────────
     if "momentum_3y" in data.columns and data["momentum_3y"].notna().any():
