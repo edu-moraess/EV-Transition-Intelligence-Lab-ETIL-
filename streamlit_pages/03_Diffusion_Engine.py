@@ -143,43 +143,138 @@ def render(df: pd.DataFrame):
 
     # ── Multi-country comparison ──────────────────────────────────────────
     st.markdown("---")
-    st.markdown("#### Multi-Country Bass Comparison")
-    compare = st.multiselect(
-        "Add countries",
-        [c for c in countries if c != selected],
-        default=["Norway", "Germany"][:2] if "Norway" in countries else [],
-        max_selections=4,
+    st.markdown("### Multi-Country Comparison — Where is each country on the S-curve?")
+    st.markdown(
+        "Overlaying Bass curves across countries reveals who is ahead, who is catching up, "
+        "and how much runway remains. The **normalised view** (% of market ceiling) "
+        "removes the size advantage of large countries and shows adoption stage directly."
     )
-    if compare:
-        palette = [NAVY, GREEN_DARK, AMBER, RED_DARK, NAVY_LIGHT]
+    compare = st.multiselect(
+        "Add countries to compare",
+        [c for c in countries if c != selected],
+        default=[c for c in ["Norway","Germany","Brazil","India"] if c in countries and c != selected][:3],
+        max_selections=5,
+    )
+
+    all_compare = [selected] + (compare or [])
+    palette = [NAVY, GREEN_DARK, AMBER, RED_DARK, NAVY_LIGHT, GOLD]
+
+    tab_abs, tab_norm, tab_table = st.tabs(["Cumulative sales", "% of market ceiling", "Parameter table"])
+
+    with tab_abs:
         fig_cmp = go.Figure()
-        for ci, ctry in enumerate([selected] + compare):
+        for ci, ctry in enumerate(all_compare):
             d_c = df[df["country"] == ctry].sort_values("year")
             if len(d_c) < 4: continue
             t_c = np.arange(len(d_c), dtype=float)
             S_c = d_c["ev_sales"].cumsum().values
+            col = palette[ci % len(palette)]
             fig_cmp.add_trace(go.Scatter(
                 x=d_c["year"].values, y=S_c / 1e3, mode="markers",
-                name=f"{ctry} (obs)",
-                marker=dict(size=5, color=palette[ci % len(palette)]),
+                name=f"{ctry} (observed)",
+                marker=dict(size=5, color=col, opacity=0.7),
+                showlegend=True,
             ))
             try:
-                bass = BassDiffusion(); bass.fit(t_c, S_c)
-                t_ext = np.arange(0, len(t_c) + horizon, dtype=float)
-                y_ext = np.arange(int(d_c["year"].min()),
-                                   int(d_c["year"].min()) + len(t_ext))
+                bass_c = BassDiffusion(); bass_c.fit(t_c, S_c)
+                t_ext  = np.arange(0, len(t_c) + horizon, dtype=float)
+                y_ext  = np.arange(int(d_c["year"].min()),
+                                    int(d_c["year"].min()) + len(t_ext))
                 fig_cmp.add_trace(go.Scatter(
-                    x=y_ext, y=bass.predict(t_ext) / 1e3, mode="lines",
-                    name=f"{ctry} (Bass)",
-                    line=dict(color=palette[ci % len(palette)], width=1.8, dash="dash"),
+                    x=y_ext, y=bass_c.predict(t_ext) / 1e3, mode="lines",
+                    name=f"{ctry} (Bass fit)",
+                    line=dict(color=col, width=2.2, dash="dash"),
+                    showlegend=False,
                 ))
             except Exception:
                 pass
         fig_cmp.add_vline(x=int(df["year"].max()), line_dash="dot",
-                           line_color=SLATE, line_width=1)
-        lay_c = base_layout(360)
-        lay_c.update({"xaxis": {**lay_c.get("xaxis", {}), "title": "Year"},
-                       "yaxis": {**lay_c.get("yaxis", {}),
-                                  "title": "Thousand units (cumulative)"}})
+                           line_color=SLATE, line_width=1,
+                           annotation_text="Today", annotation_font_size=9)
+        lay_c = base_layout(400, "Cumulative EV Adoption — Bass Model Comparison")
+        lay_c.update({"xaxis": {**lay_c.get("xaxis",{}), "title": "Year"},
+                       "yaxis": {**lay_c.get("yaxis",{}), "title": "Thousand units (cumulative)"}})
         fig_cmp.update_layout(**lay_c)
         st.plotly_chart(fig_cmp, use_container_width=True, config=chart_config())
+
+    with tab_norm:
+        st.caption(
+            "Normalised to % of fitted market ceiling (M). "
+            "This removes scale and shows how far along the adoption curve each country is — "
+            "0% = no EVs, 100% = full saturation."
+        )
+        fig_norm = go.Figure()
+        for ci, ctry in enumerate(all_compare):
+            d_c = df[df["country"] == ctry].sort_values("year")
+            if len(d_c) < 4: continue
+            t_c = np.arange(len(d_c), dtype=float)
+            S_c = d_c["ev_sales"].cumsum().values
+            col = palette[ci % len(palette)]
+            try:
+                bass_c = BassDiffusion(); bass_c.fit(t_c, S_c)
+                M_c    = bass_c.get_params().get("M", 1)
+                t_ext  = np.arange(0, len(t_c) + horizon, dtype=float)
+                y_ext  = np.arange(int(d_c["year"].min()),
+                                    int(d_c["year"].min()) + len(t_ext))
+                pct    = bass_c.predict(t_ext) / M_c * 100
+                # mark current position
+                current_pct = S_c[-1] / M_c * 100
+                fig_norm.add_trace(go.Scatter(
+                    x=y_ext, y=pct, mode="lines",
+                    name=f"{ctry} ({current_pct:.0f}% adopted)",
+                    line=dict(color=col, width=2.5),
+                    hovertemplate=f"{ctry} · %{{x}}: %{{y:.1f}}% of ceiling<extra></extra>",
+                ))
+                # annotate current position
+                fig_norm.add_trace(go.Scatter(
+                    x=[int(d_c["year"].max())], y=[current_pct],
+                    mode="markers+text",
+                    text=[f"{current_pct:.0f}%"],
+                    textposition="top right",
+                    textfont=dict(size=9, color=col),
+                    marker=dict(size=9, color=col),
+                    showlegend=False,
+                ))
+            except Exception:
+                pass
+        fig_norm.add_vline(x=int(df["year"].max()), line_dash="dot",
+                            line_color=SLATE, line_width=1,
+                            annotation_text="Today", annotation_font_size=9)
+        fig_norm.add_hline(y=50, line_dash="dot",
+                            line_color="rgba(128,128,128,0.4)", line_width=1,
+                            annotation_text="50% saturation", annotation_font_size=9)
+        lay_n = base_layout(400, "Adoption Stage — % of Fitted Market Ceiling")
+        lay_n.update({"xaxis": {**lay_n.get("xaxis",{}), "title": "Year"},
+                       "yaxis": {**lay_n.get("yaxis",{}), "title": "% of market ceiling",
+                                   "range": [0, 105]}})
+        fig_norm.update_layout(**lay_n)
+        st.plotly_chart(fig_norm, use_container_width=True, config=chart_config())
+
+    with tab_table:
+        st.caption("Bass parameters fitted per country. M = ceiling, p = innovation rate, q = imitation rate.")
+        table_rows = []
+        for ctry in all_compare:
+            d_c = df[df["country"] == ctry].sort_values("year")
+            if len(d_c) < 4: continue
+            t_c = np.arange(len(d_c), dtype=float)
+            S_c = d_c["ev_sales"].cumsum().values
+            try:
+                bass_c = BassDiffusion(); bass_c.fit(t_c, S_c)
+                params = bass_c.get_params()
+                M_c = params.get("M", 0)
+                current_pct = S_c[-1] / M_c * 100 if M_c > 0 else 0
+                table_rows.append({
+                    "Country":   ctry,
+                    "M (ceiling)": f"{M_c/1e3:,.0f}k",
+                    "p":          f"{params.get('p', 0):.4f}",
+                    "q":          f"{params.get('q', 0):.4f}",
+                    "% adopted":  f"{current_pct:.1f}%",
+                    "Stage":      "Mature" if current_pct > 40 else
+                                  "Acceleration" if current_pct > 15 else
+                                  "Expansion" if current_pct > 5 else "Emerging",
+                })
+            except Exception:
+                table_rows.append({"Country": ctry, "Stage": "Model failed"})
+        if table_rows:
+            st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+
