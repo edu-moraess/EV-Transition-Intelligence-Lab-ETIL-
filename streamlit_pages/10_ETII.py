@@ -35,48 +35,63 @@ def _compute_etii(df_hash: str, evqti_weight: float, df: pd.DataFrame) -> pd.Dat
     """
     Compute the ETII composite index.
 
-    Steps:
-    1. Fit EVQTI v3 → get raw scores per country
-    2. Fetch World Bank fundamentals for each country
-    3. Normalise both to [0, 100]
-    4. Weighted average with user-defined weight
-    5. Return ranked DataFrame
+    Resilient to World Bank network failures:
+    - If all WB calls fail, ETII falls back to EVQTI-only ranking
+    - Partial failures use cross-section median for missing scores
+    - Each country is fetched independently; one failure never blocks others
     """
     # ── EVQTI ──
     model = EVQTI()
     model.fit(df)
     evqti_df = model.get_ranking()[["country", "evqti_score"]].copy()
-    # Normalise EVQTI to [0, 100]
     lo, hi = evqti_df["evqti_score"].min(), evqti_df["evqti_score"].max()
     evqti_df["evqti_norm"] = ((evqti_df["evqti_score"] - lo) / (hi - lo + 1e-9)) * 100
 
-    # ── World Bank Fundamentals ──
-    countries = evqti_df["country"].tolist()
-    fund_rows = []
+    # ── World Bank Fundamentals (one call per country, each isolated) ──
+    countries  = evqti_df["country"].tolist()
+    fund_rows  = []
+    successful = 0
+
     for c in countries:
-        if _resolve_iso3(c) is None:
+        iso3 = _resolve_iso3(c)
+        if iso3 is None:
             fund_rows.append({"country": c, "fund_score": None})
             continue
-        f = get_country_fundamentals(c)
-        score = get_fundamentals_score(f)
-        fund_rows.append({"country": c, "fund_score": score})
+        try:
+            f     = get_country_fundamentals(c)
+            score = get_fundamentals_score(f)
+            fund_rows.append({"country": c, "fund_score": score})
+            if score is not None:
+                successful += 1
+        except Exception:
+            fund_rows.append({"country": c, "fund_score": None})
+
     fund_df = pd.DataFrame(fund_rows)
 
-    # ── Combine ──
+    # ── Combine — graceful degradation ──
     combined = evqti_df.merge(fund_df, on="country", how="left")
-    combined["fund_score"] = combined["fund_score"].fillna(combined["fund_score"].median())
 
-    fund_wt   = 1 - evqti_weight
+    valid_scores = combined["fund_score"].dropna()
+    if len(valid_scores) == 0:
+        # No WB data at all — use EVQTI only, fund_score = 50 (neutral)
+        combined["fund_score"] = 50.0
+        combined["wb_available"] = False
+    else:
+        combined["fund_score"]   = combined["fund_score"].fillna(valid_scores.median())
+        combined["wb_available"] = True
+
+    fund_wt = 1 - evqti_weight
     combined["etii_score"] = (
         combined["evqti_norm"] * evqti_weight +
         combined["fund_score"] * fund_wt
-    )
-    combined["etii_score"]  = combined["etii_score"].round(2)
-    combined["etii_rank"]   = combined["etii_score"].rank(ascending=False).astype(int)
-    combined["evqti_rank"]  = combined["evqti_norm"].rank(ascending=False).astype(int)
-    combined["fund_rank"]   = combined["fund_score"].rank(ascending=False).astype(int)
-    combined = combined.sort_values("etii_score", ascending=False).reset_index(drop=True)
-    return combined
+    ).round(2)
+
+    combined["etii_rank"]  = combined["etii_score"].rank(ascending=False).astype(int)
+    combined["evqti_rank"] = combined["evqti_norm"].rank(ascending=False).astype(int)
+    combined["fund_rank"]  = combined["fund_score"].rank(ascending=False).astype(int)
+    combined["wb_coverage_pct"] = successful / max(len(countries), 1) * 100
+
+    return combined.sort_values("etii_score", ascending=False).reset_index(drop=True)
 
 
 def render(df: pd.DataFrame):
@@ -118,11 +133,20 @@ def render(df: pd.DataFrame):
         st.warning("Not enough data to compute ETII.")
         return
 
-    wb_coverage = etii["fund_score"].notna().mean()
-    st.caption(
-        f"World Bank data available for {wb_coverage:.0%} of countries. "
-        "Countries without coverage use the median Fundamentals score."
-    )
+    wb_coverage = etii["wb_coverage_pct"].iloc[0] if "wb_coverage_pct" in etii.columns else 0
+    wb_available = etii["wb_available"].iloc[0] if "wb_available" in etii.columns else False
+
+    if not wb_available:
+        st.warning(
+            "⚠️ World Bank API unavailable — ETII computed with EVQTI only "
+            "(Fundamentals Score set to neutral 50). "
+            "The ranking still reflects momentum signal; fundamentals will load when the API is reachable."
+        )
+    else:
+        st.caption(
+            f"World Bank data fetched for {wb_coverage:.0f}% of countries. "
+            "Countries without coverage use the cross-section median Fundamentals score."
+        )
     st.markdown("---")
 
     # ── Top KPIs ──────────────────────────────────────────────────────────────
