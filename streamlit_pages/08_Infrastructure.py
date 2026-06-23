@@ -289,5 +289,76 @@ def render(df: pd.DataFrame):
                           "xaxis": {**lay7.get("xaxis",{}), "title": "Year"}})
             fig7.update_layout(**lay7)
             st.plotly_chart(fig7, use_container_width=True, config=chart_config())
+
+        # ── Infrastructure projection ──────────────────────────────────────────
+        st.markdown(f"##### Infrastructure forecast — when does {selected} reach the IEA target?")
+        st.caption(
+            "Linear extrapolation of the last 3 years of charger growth. "
+            "Shows when the country is projected to reach the IEA reference of 10 EVs per charger. "
+            "⚠️ Linear extrapolation only — policy changes or EV demand surges can shift this significantly."
+        )
+        if len(epc_c) >= 3 and not epc_c.empty:
+            from scipy.stats import linregress
+            recent_epc = epc_c.tail(4)
+            slope, intercept, r2, _, _ = linregress(
+                recent_epc["year"].values,
+                recent_epc["ev_per_charger"].values
+            )
+            r2 = r2 ** 2  # linregress returns r, not r²
+
+            # Project 10 years forward
+            last_yr = int(epc_c["year"].max())
+            future_years = list(range(last_yr + 1, last_yr + 11))
+            proj_vals = [max(slope * y + intercept, 0) for y in future_years]
+
+            # Find when reaches IEA target of 10
+            target = 10
+            target_year = None
+            for y, v in zip(future_years, proj_vals):
+                if v <= target:
+                    target_year = y
+                    break
+
+            fig8 = go.Figure()
+            fig8.add_trace(go.Scatter(
+                x=epc_c["year"], y=epc_c["ev_per_charger"],
+                mode="lines+markers", name="Historical",
+                line=dict(color=AMBER, width=2.5), marker=dict(size=7, color=AMBER),
+                hovertemplate="%{x}: %{y:.0f} EVs/charger<extra></extra>",
+            ))
+            fig8.add_trace(go.Scatter(
+                x=future_years, y=proj_vals,
+                mode="lines+markers", name="Projected (linear)",
+                line=dict(color=AMBER, width=2, dash="dash"),
+                marker=dict(size=6, color=AMBER, symbol="diamond"),
+                hovertemplate="%{x}: %{y:.0f} EVs/charger (projected)<extra></extra>",
+            ))
+            fig8.add_hline(y=target, line_dash="dot", line_color=GREEN_MED, line_width=1.5,
+                           annotation_text="IEA target (10 EVs/charger)",
+                           annotation_font_size=9)
+            if target_year:
+                fig8.add_vline(x=target_year, line_dash="dot",
+                               line_color=GREEN_MED, line_width=1,
+                               annotation_text=f"Reaches target ~{target_year}",
+                               annotation_font_size=9)
+
+            lay8 = base_layout(280)
+            lay8.update({"yaxis": {**lay8.get("yaxis",{}), "title": "EVs per charger (lower = better)"},
+                          "xaxis": {**lay8.get("xaxis",{}), "title": "Year"}})
+            fig8.update_layout(**lay8)
+            st.plotly_chart(fig8, use_container_width=True, config=chart_config())
+
+            if target_year:
+                current_val = float(epc_c["ev_per_charger"].iloc[-1])
+                st.caption(
+                    f"{selected} currently has **{current_val:.0f} EVs per public charger**. "
+                    f"At the current trend (slope {slope:+.1f}/year), it is projected to reach "
+                    f"the IEA reference of 10 EVs/charger around **{target_year}**."
+                )
+            else:
+                st.caption(
+                    f"At the current trend, {selected} does not reach the IEA target of 10 EVs/charger "
+                    f"within the 10-year projection window. Infrastructure build-out needs to accelerate."
+                )
     else:
         st.info(f"No charging infrastructure data available for {selected}.")
