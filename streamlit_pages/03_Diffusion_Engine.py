@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from models.diffusion import BassDiffusion, LogisticGrowth, GompertzModel
-from visualization.theme import chart_config, base_layout, NAVY, GREEN_DARK, RED_DARK, NAVY_LIGHT, AMBER, SLATE
+from visualization.theme import chart_config, base_layout, NAVY, GREEN_DARK, RED_DARK, NAVY_LIGHT, AMBER, GOLD, SLATE
 
 _COLORS = {"Bass": NAVY, "Logistic": GREEN_DARK, "Gompertz": AMBER}
 
