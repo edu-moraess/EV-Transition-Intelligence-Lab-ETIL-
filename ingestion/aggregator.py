@@ -179,16 +179,63 @@ class Aggregator:
         self,
         category: str = "Historical",
     ) -> pd.DataFrame:
-        """EV charging points — infrastructure, not vehicle-mode specific."""
-        df = self._filter_base("EV charging points", category)
-        # Exclude mode='EV'/'EVSE' (infrastructure label, not vehicle mode)
-        df = df[~df["mode"].isin(_INFRA_MODES)]
+        """
+        Total EV charging points (all types summed: fast + slow + ultra-fast).
+        mode='EVSE' is the correct infrastructure label in IEA data.
+        """
+        df = self.df[
+            (self.df["parameter"] == "EV charging points") &
+            (self.df["category"] == category) &
+            (self.df["mode"] == "EVSE")   # EVSE = Electric Vehicle Supply Equipment
+        ].copy()
 
         return (
             df.groupby(["region_country", "category", "year"])["value"]
             .sum()
             .reset_index()
             .rename(columns={"region_country": "country", "value": "charging_points"})
+        )
+
+    def charging_by_type(
+        self,
+        category: str = "Historical",
+    ) -> pd.DataFrame:
+        """
+        Charging points broken down by type: fast / slow / ultra-fast.
+        Useful for infrastructure quality analysis.
+        """
+        df = self.df[
+            (self.df["parameter"] == "EV charging points") &
+            (self.df["category"] == category) &
+            (self.df["mode"] == "EVSE")
+        ].copy()
+
+        return (
+            df.groupby(["region_country", "category", "year", "powertrain"])["value"]
+            .sum()
+            .reset_index()
+            .rename(columns={"region_country": "country", "value": "charging_points",
+                              "powertrain": "charger_type"})
+        )
+
+    def ev_per_charger(
+        self,
+        category: str = "Historical",
+    ) -> pd.DataFrame:
+        """
+        Electric LDVs per charging point — IEA pre-computed ratio.
+        Lower = better infrastructure coverage relative to EV fleet size.
+        """
+        df = self.df[
+            (self.df["parameter"] == "Electric LDVs per charging point") &
+            (self.df["category"] == category)
+        ].copy()
+
+        return (
+            df.groupby(["region_country", "category", "year"])["value"]
+            .mean()
+            .reset_index()
+            .rename(columns={"region_country": "country", "value": "ev_per_charger"})
         )
 
     def breakdown_by_powertrain(
