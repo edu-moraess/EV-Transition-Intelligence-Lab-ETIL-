@@ -172,6 +172,38 @@ def render(df: pd.DataFrame):
         fig3.update_layout(**lay3)
         st.plotly_chart(fig3, use_container_width=True, config=chart_config())
 
+    # ── Momentum & Acceleration ───────────────────────────────────────────────
+    if "momentum_3y" in data.columns and data["momentum_3y"].notna().any():
+        st.markdown("### Is growth accelerating or decelerating?")
+        st.markdown(
+            "**Momentum** measures whether the growth rate itself is speeding up or slowing down. "
+            "A country with 30% YoY growth accelerating is very different from one decelerating — "
+            "even if the current rate looks similar."
+        )
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            mom_vals = data["momentum_3y"].fillna(0)
+            fig_mom = go.Figure(go.Bar(
+                x=data["year"], y=mom_vals,
+                marker_color=bar_color_signed(mom_vals),
+                hovertemplate="%{x}: %{y:+.1f}pp momentum<extra></extra>",
+            ))
+            lay_m = base_layout(260, "3-Year Growth Momentum (pp change in growth rate)")
+            lay_m.update({"yaxis": {**lay_m.get("yaxis",{}), "title": "pp change"},
+                           "showlegend": False})
+            fig_mom.update_layout(**lay_m)
+            st.plotly_chart(fig_mom, use_container_width=True, config=chart_config())
+        with col_m2:
+            # Gauge: current momentum
+            latest_mom = float(data["momentum_3y"].dropna().iloc[-1]) if data["momentum_3y"].notna().any() else 0
+            if latest_mom > 5:
+                st.success(f"🚀 **Accelerating** — momentum +{latest_mom:.1f}pp over last 3 years. Growth is picking up speed.")
+            elif latest_mom < -5:
+                st.warning(f"⚠️ **Decelerating** — momentum {latest_mom:.1f}pp over last 3 years. Growth is slowing down.")
+            else:
+                st.info(f"➡️ **Stable** — momentum {latest_mom:+.1f}pp over last 3 years. Growth rate is roughly steady.")
+            st.caption("Momentum = average change in YoY growth rate over the last 3 years.")
+
     st.markdown("---")
 
     # ── Fuel price context ────────────────────────────────────────────────────
