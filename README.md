@@ -1,244 +1,136 @@
-# ⚡ EV Transition Intelligence Lab (ETIL)
-Institutional quantitative platform for global EV transition analysis.
+**EV Transition Intelligence Lab (ETIL)**  
+*Plataforma institucional quantitativa para análise global da transição para veículos elétricos*
 
-Live app: quantev.streamlit.app
-Author: Carlos Eduardo · [GitHub](https://github.com/edu-moraess)
-Data sources: IEA Global EV Outlook 2025/2026 · IEA Energy Prices 2026 · World Bank API · NewsAPI
+**Aplicação em produção:** [quantev.streamlit.app](https://quantev.streamlit.app)  
+**Autor:** Carlos Eduardo · [GitHub](https://github.com/edu-moraess)
 
-## What this is
+**Fontes de dados:** IEA Global EV Outlook 2025/2026 · IEA Energy Prices 2026 · World Bank API · NewsAPI
 
-ETIL tracks the global shift to electric vehicles across 63 countries — where it is happening, how fast, and what the data says about where it is going next.
+---
 
-The platform combines diffusion models, regime detection, infrastructure analysis, policy simulation and a proprietary two-factor composite index into a single research environment. It is designed to be analytically rigorous and readable by anyone interested in the energy transition.
+### Visão Geral
 
-## Pages
+O **ETIL** constitui uma plataforma analítica avançada que monitora a transição global para veículos elétricos em **63 países**. A solução integra modelos de difusão, detecção de regimes, análise de infraestrutura, simulação de políticas e um índice composto proprietário (EVQTI + ETII) em um ambiente unificado de pesquisa.
 
-| Page | What it answers |
-|------|-----------------|
-| 🌍 Global Monitor | Where is EV adoption happening, who is growing fastest, and what does the fleet look like? |
-| 🔬 Country Lab | Full country deep-dive — sales, momentum, fuel context, World Bank fundamentals, diffusion models, adoption regime. |
-| 🧠 Diffusion Engine | Where is each country on the S-curve? Bass, Logistic and Gompertz with R², AIC, BIC — plus multi-country normalised comparison. |
-| 🔄 Regime Detection | Is a market Emerging, Expanding, Accelerating or Maturing? GMM + Bayesian Changepoint. |
-| 📊 Forecast Lab | Probabilistic 10-year forecast with 80/95% CI via Gaussian Process + Monte Carlo (2,000 paths). |
-| 🏆 EVQTI Ranking | Which early-stage markets are most likely to grow fastest next year? Full IC/IR validation + rolling backtest. |
-| 📰 EV Pulse | Live news digest with AI-generated analytical summaries (requires NewsAPI key). |
-| 🔌 Infrastructure | Charging network build-out: total chargers, EVs per charger vs IEA target, charger type mix, infrastructure vs sales race. |
-| 🎯 Scenarios | What if? — Bass diffusion scenarios with adjustable p, q, M parameters; uncertainty band across optimistic/conservative. |
-| 🌐 ETII Composite Index | Combines EVQTI momentum signal with World Bank structural capacity into a single 0–100 ranking with opportunity matrix. |
-| 🔬 Research Intelligence | Academic research tracker — latest papers, citations, and trends in EV transition literature. |
+Projetada para rigor analítico extremo e acessibilidade, a plataforma permite que decisores, pesquisadores e investidores compreendam não apenas *onde* a adoção está ocorrendo, mas *com que velocidade* e *para onde* o sistema está evoluindo.
 
-## Production Results — EVQTI v3 (IEA 2026, Cars)
+---
 
-| Metric | Value | What it means |
-|--------|-------|---------------|
-| Mean Rank IC | +0.237 | Strong predictive signal — robust threshold is 0.10 |
-| Information Ratio | 0.99 | Consistent signal across time — IR > 0.5 is the target |
-| Years with positive IC | 93% | Signal points in the right direction in 13 out of 14 years |
-| Q5-Q1 growth spread | +122pp | Top-quintile countries grew 122pp faster than bottom-quintile |
-| Quintile monotonicity | ✅ | Q1=49% → Q2=87% → Q3=106% → Q4=122% → Q5=171% |
-| Rolling backtest IC | +0.16 → +0.52 | Signal strengthened over time — not degrading |
+### Funcionalidades Principais
 
-## Project Structure
+| Página | Objetivo Analítico |
+|--------|--------------------|
+| 🌍 **Global Monitor** | Visão macro da adoção, ranking de crescimento e composição da frota |
+| 🔬 **Country Lab** | Análise aprofundada por país: vendas, momentum, contexto de combustíveis, fundamentos World Bank, modelos de difusão e regime de adoção |
+| 🧠 **Diffusion Engine** | Posicionamento de cada país na curva-S (Bass, Logistic, Gompertz) com métricas de ajuste (R², AIC, BIC) e comparação normalizada multi-país |
+| 🔄 **Regime Detection** | Classificação de mercados (Emerging, Expanding, Accelerating, Maturing) via GMM + Bayesian Changepoint |
+| 📊 **Forecast Lab** | Previsões probabilísticas de 10 anos com intervalos de confiança 80%/95% (Gaussian Process + Monte Carlo, 2.000 trajetórias) |
+| 🏆 **EVQTI Ranking** | Ranking preditivo de mercados early-stage com validação IC/IR completa e backtest rolling |
+| 📰 **EV Pulse** | Digest de notícias em tempo real com resumos analíticos gerados por IA (requer chave NewsAPI) |
+| 🔌 **Infrastructure** | Inteligência de rede de carregamento: total de chargers, EVs por charger vs. meta IEA, mix por tipo e corrida infraestrutura × vendas |
+| 🎯 **Scenarios** | Simulações "What if" via parâmetros ajustáveis do modelo Bass (p, q, M) com bandas de incerteza |
+| 🌐 **ETII Composite Index** | Índice 0–100 que combina momentum (EVQTI) e capacidade estrutural (World Bank) com matriz de oportunidades |
+| 🔬 **Research Intelligence** | Rastreamento acadêmico de papers, citações e tendências na literatura de transição energética |
 
-    ├── app.py                          # Entry point — routing, pipeline, dataset fallback
-    ├── requirements.txt
-    ├── .gitignore
-    │
-    ├── .streamlit/
-    │   ├── config.toml                 # Light theme, royal blue #1551d1
-    │   └── secrets.toml                # API keys — never commit
-    │
-    ├── data/
-    │   ├── fuel_loader.py              # IEA Energy Prices — 33 countries, cached, fault-tolerant
-    │   ├── world_bank_client.py        # World Bank API — GDP, urbanisation, fundamentals score
-    │   └── raw/
-    │       ├── EV_Data_Explorer_2025_GEVO_clean.csv
-    │       ├── EV_Data_Explorer_2026_GEVO_clean.csv
-    │       └── fuel_prices_iea.csv
-    │
-    ├── ingestion/
-    │   ├── loader.py                   # IEALoader — validates, loads, delegates to Aggregator
-    │   ├── aggregator.py               # Correct dimensional aggregation — no double-counting
-    │   │                               # charging_points(), charging_by_type(), ev_per_charger()
-    │   └── dataset_engine.py           # Legacy compatibility layer
-    │
-    ├── preprocessing/
-    │   ├── cleaning.py
-    │   ├── transformation.py
-    │   └── features.py                 # Computes: cagr, growth_rate, momentum_3y, volatility,
-    │                                   #            ev_per_capita, ev_per_charger, penetration
-    │
-    ├── models/
-    │   ├── diffusion/                  # Bass · Logistic · Gompertz
-    │   ├── forecasting/                # Gaussian Process + Monte Carlo (80/95% CI)
-    │   ├── regimes/                    # GMM + Bayesian Changepoint
-    │   └── scoring/
-    │       └── evqti.py                # EVQTI v3 with backtest() method
-    │
-    ├── analytics/
-    │   ├── country_analysis.py
-    │   ├── global_ranking.py
-    │   ├── scenario_engine.py          # Bass scenario simulation (Baseline/Optimistic/Conservative)
-    │   └── scenario_engine.py
-    │
-    ├── visualization/
-    │   └── theme.py                    # Centralised palette — vibrant, modebar hidden project-wide
-    │
-    ├── streamlit_pages/
-    │   ├── 01_Global_Monitor.py
-    │   ├── 02_Country_Lab.py           # + momentum, World Bank fundamentals
-    │   ├── 03_Diffusion_Engine.py      # + multi-country S-curve normalised view + parameter table
-    │   ├── 04_Regime_Detection.py
-    │   ├── 05_Forecast_Lab.py
-    │   ├── 06_EVQTI_Ranking.py         # + rolling backtest chart
-    │   ├── 07_EV_Pulse.py              # NewsAPI + Claude AI summaries
-    │   ├── 08_Infrastructure.py        # Charging network intelligence
-    │   ├── 09_Scenarios.py             # Bass policy scenario engine
-    │   ├── 10_ETII.py                  # Composite index (EVQTI + Fundamentals)
-    │   └── 11_Research_Intelligence.py # Academic research tracker
-    │
-    ├── tests/
-    │   ├── test_aggregator.py          # 29 regression tests (double-counting, schema detection)
-    │   ├── test_loader.py
-    │   └── test_evqti.py               # Anti-leakage, winsorization, quintile monotonicity
-    │
-    └── config/
-        └── settings.py                 # Centralised paths + model hyperparameters
+---
 
-## EVQTI v3 — EV Quant Transition Index
+### Resultados de Produção — EVQTI v3 (IEA 2026, Cars)
 
-### The Intuition
+| Métrica | Valor | Interpretação |
+|---------|-------|---------------|
+| Mean Rank IC | +0.237 | Sinal preditivo robusto (threshold > 0.10) |
+| Information Ratio | 0.99 | Consistência temporal elevada (target > 0.5) |
+| Anos com IC positivo | 93% | 13 de 14 anos com sinal direcionalmente correto |
+| Q5-Q1 growth spread | +122 pp | Quintil superior cresceu 122 pontos percentuais acima do inferior |
+| Monotonicidade de quintis | ✅ | Q1=49% → Q2=87% → Q3=106% → Q4=122% → Q5=171% |
+| Rolling backtest IC | +0.16 → +0.52 | Fortalecimento do sinal ao longo do tempo |
 
-Norway ranks low on EVQTI despite being a global EV leader. Countries like Brazil, Indonesia and South Africa rank high. The reason: early-stage markets grow faster — Bass diffusion law applied to the country cross-section. EVQTI operationalises this into a measurable, anti-leakage, statistically validated factor.
+---
 
-### Factor Construction
+### EVQTI v3 — EV Quant Transition Index
 
-Signal built at t-1. Target: EV growth at t+1. No future information leaks in.
+**Princípio:** Países em estágios iniciais apresentam maior potencial de crescimento relativo (lei de difusão de Bass aplicada transversalmente). A Noruega, apesar de líder absoluta, ranqueia moderadamente no EVQTI, enquanto Brasil, Indonésia e África do Sul aparecem entre os mais promissores.
 
-| Feature (t-1) | Direction | Weight | Empirical IC |
-|---------------|-----------|--------|--------------|
-| EV stock share | Negative — lower = earlier stage | 48.5% | -0.259 (p<0.001) |
-| EV sales share | Negative — lower = earlier stage | 51.5% | -0.275 (p<0.001) |
+**Construção do Fator (sem leakage de informação futura):**
+- **EV stock share** (t-1): peso 48,5% | IC = -0.259 (p<0.001)
+- **EV sales share** (t-1): peso 51,5% | IC = -0.275 (p<0.001)
 
-Growth rate excluded: IC = -0.037, p = 0.36 — no cross-country predictive power.
+**Pipeline de normalização:**
+1. Winsorização 1%-99%
+2. Lag dos valores winsorizados
+3. Re-winsorização dos lags
+4. Z-score cross-sectional anual
+5. Score composto com inversão de sinal
+6. Winsorização final do target (5%-95%)
 
-### Normalisation Pipeline
+---
 
-1. Winsorise features at 1%-99%
-2. Create lags (t-1) on winsorised values
-3. Re-winsorise lags at their own P1/P99
-4. Z-score cross-section per year
-5. Score = -(w1*z1 + w2*z2)
-6. Winsorise target at 5%-95%
+### ETII — EV Transition Intelligence Index
 
-### Validation
+Índice composto 0–100 que pondera:
+- **50% EVQTI** (momentum)
+- **50% World Bank Fundamentals Score** (capacidade estrutural: PIB per capita, urbanização, crescimento do PIB e CO₂ per capita)
 
-| Metric | Result | Threshold |
-|--------|--------|-----------|
-| Rank IC | +0.237 | > 0.10 = robust |
-| IR | 0.99 | > 0.50 = consistent |
-| % years IC > 0 | 93% | — |
-| Q5-Q1 spread | +122pp | — |
-| Rolling backtest | +0.16 -> +0.52 | Strengthening |
+**Matriz de Oportunidades:** gráfico de dispersão EVQTI × Fundamentals com quadrantes claramente anotados. Quadrante superior-direito identifica as oportunidades de maior convicção.
 
-## ETII — EV Transition Intelligence Index
+**Resiliência:** em caso de indisponibilidade da API World Bank, o sistema degrada graciosamente para EVQTI puro (score fundamental neutro = 50).
 
-Combines EVQTI (momentum, 50%) with World Bank Fundamentals Score (structural capacity, 50%) into a single 0-100 composite. Weight is adjustable via slider.
+---
 
-Fundamentals Score = equally-weighted composite of GDP per capita, urbanisation, GDP growth and CO2 per capita from the World Bank public API (no key required, cached 24h).
+### Inteligência de Infraestrutura
 
-Resilience: if the World Bank API is unavailable, ETII falls back to EVQTI-only ranking with a neutral fundamentals score of 50 — the page always loads, never crashes.
+Baseada em dados IEA de pontos de carregamento (52 países, 82,3 milhões de chargers em 2025).
 
-Opportunity matrix: scatter of EVQTI vs Fundamentals, with quadrant annotations. Top-right (high both) = highest-conviction early-stage opportunities.
+**Métricas principais:**
+- Total de carregadores públicos
+- EVs por charger (meta IEA de referência: 10 EVs/charger)
+- Mix por tecnologia (Fast / Slow / Ultra-fast)
+- Índice de corrida: crescimento de chargers × crescimento de vendas
 
-## Infrastructure Intelligence
+**Regras rigorosas de agregação (sem double-counting):**
+- IEA 2026: `powertrain='EV'` representa o agregado correto (BEV + PHEV + FCEV).
+- Componentes são utilizados apenas quando desejada granularidade.
 
-Powered by IEA charging point data (52 countries, 82.3M total chargers in 2025).
+---
 
-| Metric | Description |
-|--------|-------------|
-| Total chargers | Publicly available, all types combined |
-| EVs per charger | IEA pre-computed ratio — lower = better coverage |
-| Charger mix | Fast / Slow / Ultra-fast breakdown |
-| Infrastructure race | Indexed growth: chargers vs EV sales — who is keeping pace? |
+### Contexto de Preços de Combustíveis
 
-IEA reference target: 10 EVs per public charger (shown as reference line).
+IEA Energy Prices Monthly (Jun/2026) — preços ao consumidor final (incluindo impostos) para gasolina e diesel em 33 países (Jan/2015–Mai/2026).
 
-### Aggregation Rules — No Double-Counting
+---
 
-IEA 2026: powertrain='EV' = aggregate (BEV + PHEV + FCEV)
-          powertrain='BEV'/'PHEV'... = components
+### Arquitetura Técnica
 
-WRONG:  Total = EV + BEV + PHEV   <- double-counts
-RIGHT:  Total = EV                <- aggregate only
-   or:  Total = BEV + PHEV + FCEV <- components only
+O projeto segue arquitetura modular e testável, com forte ênfase em reprodutibilidade, resiliência e validação estatística.
 
-IEA 2025: no 'EV' aggregate in EV sales -> BEV + PHEV + FCEV
-IEA charging: mode='EVSE' (not 'EV') — corrected in aggregator
+**Principais módulos:**
+- `ingestion/` — carregamento e agregação dimensional robusta
+- `preprocessing/` — feature engineering avançado (CAGR, momentum, volatilidade, penetração)
+- `models/` — Bass, Logistic, Gompertz, Gaussian Process, GMM, Bayesian Changepoint, Monte Carlo
+- `analytics/` — engines de cenário e ranking
+- `tests/` — 29 testes de regressão críticos (anti-leakage, monotonicidade, double-counting)
 
-Primary key: country x category x year x parameter x mode x powertrain
+---
 
-## Fuel Price Context
+### Setup Local
 
-IEA Energy Prices Monthly Excerpt (Jun 2026) — end-user prices including taxes.
+```bash
+git clone https://github.com/edu-moraess/EV-Transition-Intelligence-Lab-ETIL-
+cd EV-Transition-Intelligence-Lab-ETIL-
+pip install -r requirements.txt
+streamlit run app.py
+```
 
-Coverage: 33 countries · Jan 2015-May 2026 · USD/litre
-Products:   Gasoline · Diesel
-Exclusions: Ukraine (insufficient data coverage)
+**Dependências principais:** Streamlit, Pandas, NumPy, SciPy, scikit-learn, Plotly, Statsmodels, etc.
 
-## EV Pulse Setup
+---
 
-    # .streamlit/secrets.toml
-    NEWSAPI_KEY       = "your_key_here"       # newsapi.org — 100 req/day free
-    ANTHROPIC_API_KEY = "your_key_here"      # optional — enables AI summaries
+**Licença:** MIT  
+**Dados IEA:** © OECD/IEA — uso exclusivo para pesquisa não-comercial.  
+**EVQTI e ETII:** construtos analíticos de pesquisa. Não constituem recomendação de investimento.
 
-On Streamlit Cloud: App Settings -> Secrets -> paste contents.
+---
 
-Resilience: news cached 1h, AI summaries cached 24h. Every failure mode (timeout, invalid key, rate limit) surfaces a specific message — never a blank page.
-
-## Dataset Comparison
-
-| Mode | Countries | Coverage | EV sales schema |
-|------|-----------|----------|---------------|
-| IEA 2026 | 63 | 2010-2025 | powertrain = EV (aggregate) |
-| IEA 2025 | 54 | 2010-2024 | powertrain = BEV / PHEV / FCEV |
-| Combined | 63 | 2010-2025 | 2026 priority on overlaps |
-
-Automatic fallback: if selected dataset fails to load, app automatically tries the other year and notifies the user — a partial dataset is always preferred over a blank page.
-
-## Test Suite
-
-29 regression tests covering the most critical invariants:
-
-- Double-counting — Norway 2023 Cars: EV aggregate (110,000) must equal Aggregator output
-- Schema detection — powertrain='EV' in charging points must NOT trigger 2026 schema
-- Anti-leakage — lag at year t must equal value at year t-1, not t
-- Winsorization — lag values must stay within their own P1/P99 distribution
-- Quintile monotonicity — Q1 growth < Q2 < Q3 < Q4 < Q5 (factor validity)
-
-Run with: pytest tests/
-
-## Local Setup
-
-    git clone https://github.com/edu-moraess/EV-Transition-Intelligence-Lab-ETIL-
-    cd EV-Transition-Intelligence-Lab-ETIL-
-    pip install -r requirements.txt
-    streamlit run app.py
-
-## Dependencies
-
-    streamlit>=1.28.0    pandas>=2.2.0       numpy>=1.26.0
-    scipy>=1.11.0        scikit-learn>=1.3.0  plotly>=5.18.0
-    statsmodels>=0.14.0  openpyxl>=3.1.0     requests>=2.31.0
-    pytest>=7.4.0
-
-## License
-
-MIT — see LICENSE.
-IEA data (c) OECD/IEA. Non-commercial research only.
-EVQTI and ETII are research constructs, not financial advice.
-
-Carlos Eduardo · Quant Data Scientist · Edumetria
-[LinkedIn](https://www.linkedin.com/in/carlos-eduardo-2753a92b5) · [GitHub](https://github.com/edu-moraess) · [App](https://quantev.streamlit.app)
-
-IEA GEVO 2025/2026 · IEA Energy Prices 2026 · World Bank API · Models: GMM · GP · Bass · Monte Carlo · EVQTI · ETII
+**Carlos Eduardo**  
+Quant Data Scientist | Edumetria  
+[LinkedIn](https://www.linkedin.com/in/carlos-eduardo-2753a92b5) · [GitHub](https://github.com/edu-moraess) · [Aplicação](https://quantev.streamlit.app)
