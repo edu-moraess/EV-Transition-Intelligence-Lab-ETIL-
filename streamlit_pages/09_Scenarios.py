@@ -102,6 +102,10 @@ def render(df: pd.DataFrame):
 
     # Historical observed
     hist = df[df["country"] == selected].sort_values("year")
+    if hist.empty:
+        st.warning(f"No historical data available for {selected}.")
+        return
+
     hist_years = hist["year"].values
     hist_sales = hist["ev_sales"].values
     fig1.add_trace(go.Scatter(
@@ -118,11 +122,12 @@ def render(df: pd.DataFrame):
     ]:
         if scenario_df is None or scenario_df.empty:
             continue
-        is_future = scenario_df["year"] > hist_years.max()
-        if "annual_sales" not in scenario_df.columns:
+        # Try both column names for compatibility
+        sales_col = "annual_sales" if "annual_sales" in scenario_df.columns else "sales"
+        if sales_col not in scenario_df.columns:
             continue
         fig1.add_trace(go.Scatter(
-            x=scenario_df["year"], y=scenario_df["annual_sales"] / 1e3,
+            x=scenario_df["year"], y=scenario_df[sales_col] / 1e3,
             name=scenario_name, mode="lines",
             line=dict(color=colors[scenario_name],
                       width=2.5,
@@ -132,23 +137,25 @@ def render(df: pd.DataFrame):
 
     # Uncertainty band
     if (optimistic is not None and not optimistic.empty and
-        conservative is not None and not conservative.empty and
-        "annual_sales" in optimistic.columns):
-        merged_uc = optimistic[["year","annual_sales"]].merge(
-            conservative[["year","annual_sales"]], on="year", suffixes=("_opt","_con")
-        )
-        future_uc = merged_uc[merged_uc["year"] > hist_years.max()]
-        if not future_uc.empty:
-            fig1.add_trace(go.Scatter(
-                x=pd.concat([future_uc["year"], future_uc["year"][::-1]]),
-                y=pd.concat([future_uc["annual_sales_opt"] / 1e3,
-                              future_uc["annual_sales_con"][::-1] / 1e3]),
-                fill="toself",
-                fillcolor="rgba(31,81,209,0.08)",
-                line=dict(color="rgba(0,0,0,0)"),
-                name="Uncertainty band",
-                hoverinfo="skip",
-            ))
+        conservative is not None and not conservative.empty):
+        opt_col = "annual_sales" if "annual_sales" in optimistic.columns else "sales"
+        con_col = "annual_sales" if "annual_sales" in conservative.columns else "sales"
+        if opt_col in optimistic.columns and con_col in conservative.columns:
+            merged_uc = optimistic[["year", opt_col]].merge(
+                conservative[["year", con_col]], on="year", suffixes=("_opt","_con")
+            )
+            future_uc = merged_uc[merged_uc["year"] > hist_years.max()]
+            if not future_uc.empty:
+                fig1.add_trace(go.Scatter(
+                    x=pd.concat([future_uc["year"], future_uc["year"][::-1]]),
+                    y=pd.concat([future_uc[opt_col + "_opt"] / 1e3,
+                                  future_uc[con_col + "_con"][::-1] / 1e3]),
+                    fill="toself",
+                    fillcolor="rgba(31,81,209,0.08)",
+                    line=dict(color="rgba(0,0,0,0)"),
+                    name="Uncertainty band",
+                    hoverinfo="skip",
+                ))
 
     # Today line
     fig1.add_vline(x=hist_years.max(), line_dash="dot",
@@ -159,7 +166,7 @@ def render(df: pd.DataFrame):
     lay1.update({"xaxis": {**lay1.get("xaxis",{}), "title": "Year"},
                   "yaxis": {**lay1.get("yaxis",{}), "title": "Thousand units / year"}})
     fig1.update_layout(**lay1)
-    st.plotly_chart(fig1, use_container_width=True, config=chart_config())
+    st.plotly_chart(fig1, config=chart_config())
 
     # ── Summary table ─────────────────────────────────────────────────────────
     st.markdown("### 10-year summary")
@@ -168,14 +175,17 @@ def render(df: pd.DataFrame):
     for name, sdf in [("Baseline", baseline),
                        ("Optimistic", optimistic),
                        ("Conservative", conservative)]:
-        if sdf is None or sdf.empty or "annual_sales" not in sdf.columns:
+        if sdf is None or sdf.empty:
+            continue
+        sales_col = "annual_sales" if "annual_sales" in sdf.columns else "sales"
+        if sales_col not in sdf.columns:
             continue
         future_only = sdf[sdf["year"] > hist_years.max()]
         if future_only.empty:
             continue
-        peak = future_only["annual_sales"].max()
-        final = future_only["annual_sales"].iloc[-1]
-        total = future_only["annual_sales"].sum()
+        peak = future_only[sales_col].max()
+        final = future_only[sales_col].iloc[-1]
+        total = future_only[sales_col].sum()
         rows.append({
             "Scenario":         name,
             "Peak sales":       f"{peak/1e3:.0f}k",
@@ -184,7 +194,7 @@ def render(df: pd.DataFrame):
             "vs Baseline":      "—" if name == "Baseline" else "",
         })
     if rows:
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows), hide_index=True)
 
     with st.expander("How are scenarios built?"):
         st.markdown("""
