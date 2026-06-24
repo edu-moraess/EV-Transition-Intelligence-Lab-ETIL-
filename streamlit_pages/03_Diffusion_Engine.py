@@ -125,7 +125,7 @@ def render(df: pd.DataFrame):
     lay.update({"xaxis": {**lay.get("xaxis", {}), "title": "Year"},
                  "yaxis": {**lay.get("yaxis", {}), "title": ylab}})
     fig.update_layout(**lay)
-    st.plotly_chart(fig, use_container_width=True, config=chart_config())
+    st.plotly_chart(fig, config=chart_config())
 
     # ── Projection table ──────────────────────────────────────────────────
     if fitted:
@@ -139,7 +139,7 @@ def render(df: pd.DataFrame):
             for name, model in fitted.items():
                 row[f"{name} (k)"] = round(model.predict(np.array([ti]))[0] / 1e3, 1)
             rows.append(row)
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows), hide_index=True)
 
     # ── Multi-country comparison ──────────────────────────────────────────
     st.markdown("---")
@@ -195,7 +195,7 @@ def render(df: pd.DataFrame):
         lay_c.update({"xaxis": {**lay_c.get("xaxis",{}), "title": "Year"},
                        "yaxis": {**lay_c.get("yaxis",{}), "title": "Thousand units (cumulative)"}})
         fig_cmp.update_layout(**lay_c)
-        st.plotly_chart(fig_cmp, use_container_width=True, config=chart_config())
+        st.plotly_chart(fig_cmp, config=chart_config())
 
     with tab_norm:
         st.caption(
@@ -248,7 +248,7 @@ def render(df: pd.DataFrame):
                        "yaxis": {**lay_n.get("yaxis",{}), "title": "% of market ceiling",
                                    "range": [0, 105]}})
         fig_norm.update_layout(**lay_n)
-        st.plotly_chart(fig_norm, use_container_width=True, config=chart_config())
+        st.plotly_chart(fig_norm, config=chart_config())
 
     with tab_table:
         st.caption("Bass parameters fitted per country. M = ceiling, p = innovation rate, q = imitation rate.")
@@ -276,5 +276,4 @@ def render(df: pd.DataFrame):
             except Exception:
                 table_rows.append({"Country": ctry, "Stage": "Model failed"})
         if table_rows:
-            st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
-
+            st.dataframe(pd.DataFrame(table_rows), hide_index=True)
