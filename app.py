@@ -152,6 +152,7 @@ def _sidebar() -> tuple[str, str, str]:
         "🔌 Infrastructure":       "streamlit_pages.08_Infrastructure",
         "🎯 Scenarios":            "streamlit_pages.09_Scenarios",
         "🌐 ETII Composite Index": "streamlit_pages.10_ETII",
+        "🔬 Research Intelligence":"streamlit_pages.11_Research_Intelligence",
     }
     selection = st.sidebar.radio("", list(pages.keys()), key="nav_radio")
 
