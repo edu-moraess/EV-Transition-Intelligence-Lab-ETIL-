@@ -176,7 +176,8 @@ def render(df: pd.DataFrame):
         "This is not a quality ranking — a high score means the market is early, not that it is better."
     )
     n_show = st.slider("Countries to display", 10, len(rdf), min(30, len(rdf)))
-    top_n  = rdf.head(n_show).sort_values("evqti_score")
+    # FIX: Garante ordenação decrescente antes de pegar o head()
+    top_n = rdf.sort_values("evqti_score", ascending=False).head(n_show).sort_values("evqti_score")
     norm   = (top_n["evqti_score"] - top_n["evqti_score"].min()) / \
              (top_n["evqti_score"].max() - top_n["evqti_score"].min() + 1e-9)
 
