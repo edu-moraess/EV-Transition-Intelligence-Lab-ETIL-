@@ -122,7 +122,6 @@ def render(df: pd.DataFrame):
     ]:
         if scenario_df is None or scenario_df.empty:
             continue
-        # Try both column names for compatibility
         sales_col = "annual_sales" if "annual_sales" in scenario_df.columns else "sales"
         if sales_col not in scenario_df.columns:
             continue
@@ -135,7 +134,7 @@ def render(df: pd.DataFrame):
             hovertemplate=f"{scenario_name} · %{{x}}: %{{y:.1f}}k<extra></extra>",
         ))
 
-    # Uncertainty band
+    # Uncertainty band (mais visível)
     if (optimistic is not None and not optimistic.empty and
         conservative is not None and not conservative.empty):
         opt_col = "annual_sales" if "annual_sales" in optimistic.columns else "sales"
@@ -151,7 +150,7 @@ def render(df: pd.DataFrame):
                     y=pd.concat([future_uc[opt_col + "_opt"] / 1e3,
                                   future_uc[con_col + "_con"][::-1] / 1e3]),
                     fill="toself",
-                    fillcolor="rgba(31,81,209,0.08)",
+                    fillcolor="rgba(31,81,209,0.15)",  # FIX: mais visível (era 0.08)
                     line=dict(color="rgba(0,0,0,0)"),
                     name="Uncertainty band",
                     hoverinfo="skip",
@@ -163,8 +162,10 @@ def render(df: pd.DataFrame):
                    annotation_text="Today", annotation_font_size=9)
 
     lay1 = base_layout(420, f"Annual EV Sales — {selected} — Scenario Comparison")
-    lay1.update({"xaxis": {**lay1.get("xaxis",{}), "title": "Year"},
-                  "yaxis": {**lay1.get("yaxis",{}), "title": "Thousand units / year"}})
+    lay1.update({
+        "xaxis": {**lay1.get("xaxis",{}), "title": "Year"},
+        "yaxis": {**lay1.get("yaxis",{}), "title": "Thousand units / year", "rangemode": "tozero"}
+    })
     fig1.update_layout(**lay1)
     st.plotly_chart(fig1, config=chart_config())
 
@@ -180,12 +181,17 @@ def render(df: pd.DataFrame):
         sales_col = "annual_sales" if "annual_sales" in sdf.columns else "sales"
         if sales_col not in sdf.columns:
             continue
+        
+        # FIX: Peak usa o cenário COMPLETO (histórico + projeção), não só future_only
+        peak = sdf[sales_col].max()
+        
+        # Future-only para final year e total (apenas projeção)
         future_only = sdf[sdf["year"] > hist_years.max()]
         if future_only.empty:
             continue
-        peak = future_only[sales_col].max()
         final = future_only[sales_col].iloc[-1]
         total = future_only[sales_col].sum()
+        
         rows.append({
             "Scenario":         name,
             "Peak sales":       f"{peak/1e3:.0f}k",
