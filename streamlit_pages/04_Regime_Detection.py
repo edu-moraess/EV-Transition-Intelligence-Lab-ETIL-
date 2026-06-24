@@ -17,7 +17,7 @@ def render(df: pd.DataFrame):
         "Not all EV markets are in the same phase. A **Gaussian Mixture Model** classifies each "
         "year in a country's history into one of four adoption regimes — Emerging, Expansion, "
         "Acceleration or Maturity. **Bayesian Changepoint Detection** identifies the exact years "
-        "when structural breaks occurred, such as policy changes or infrastructure milestones."
+        "when structural breaks occurred, such as policy changes, infrastructure rollouts, or supply shocks."
     )
     st.markdown("---")
 
@@ -65,10 +65,11 @@ def render(df: pd.DataFrame):
         subplot_titles=["EV Sales + Detected Regimes",
                          "Regime Probability (GMM)"],
     )
+    # FIX: usar NAVY para linha de vendas — mais visível e distinto da legenda SLATE
     fig.add_trace(go.Scatter(
         x=data["year"].values, y=data["ev_sales"].values / 1e3,
         mode="lines", name="EV Sales (k)",
-        line=dict(color=SLATE, width=1.5),
+        line=dict(color=NAVY, width=1.5),
     ), row=1, col=1)
 
     for s in range(n_states):
@@ -81,44 +82,51 @@ def render(df: pd.DataFrame):
                         line=dict(width=1.2, color="white")),
         ), row=1, col=1)
 
+    # FIX: remover fill acumulativo que criava retângulo cinza
     for s in range(probs.shape[1]):
         fig.add_trace(go.Scatter(
             x=data["year"].values, y=probs[:, s],
             mode="lines", name=regime_map[s],
-            line=dict(color=color_map[s], width=0.8),
-            fill="tonexty" if s > 0 else "tozeroy",
-            fillcolor=f"rgba(0,0,0,0.04)",
+            line=dict(color=color_map[s], width=1.2),
+            # fill removido — linhas puras sem artefato visual
             showlegend=False,
         ), row=2, col=1)
 
-    lay = dict(
-        height=520,
-        margin=dict(l=0, r=0, t=40, b=0),
-        font=dict(family="Inter, Arial, sans-serif", size=11),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        legend=dict(bgcolor="rgba(0,0,0,0)",
-                    bordercolor="rgba(128,128,128,0.25)", borderwidth=1,
-                    font=dict(size=10)),
-        yaxis=dict(title="Thousand units",
-                   gridcolor="rgba(128,128,128,0.15)", gridwidth=0.5,
-                   linecolor="rgba(128,128,128,0.2)", tickfont=dict(size=10)),
-        yaxis2=dict(title="Probability", range=[0, 1],
-                    gridcolor="rgba(128,128,128,0.15)", gridwidth=0.5,
-                    linecolor="rgba(128,128,128,0.2)", tickfont=dict(size=10)),
-        xaxis2=dict(title="Year", gridcolor="rgba(128,128,128,0.15)",
-                    linecolor="rgba(128,128,128,0.2)", tickfont=dict(size=10)),
-    )
+    # Aplicar base_layout para consistência de tema
+    lay = base_layout(520)
+    lay.update({
+        "margin": dict(l=0, r=0, t=40, b=0),
+        "legend": dict(
+            bgcolor="rgba(0,0,0,0)",
+            bordercolor="rgba(128,128,128,0.25)", borderwidth=1,
+            font=dict(size=10),
+        ),
+        "yaxis": dict(
+            title="Thousand units",
+            gridcolor="rgba(128,128,128,0.15)", gridwidth=0.5,
+            linecolor="rgba(128,128,128,0.2)", tickfont=dict(size=10),
+        ),
+        "yaxis2": dict(
+            title="Probability", range=[0, 1],
+            gridcolor="rgba(128,128,128,0.15)", gridwidth=0.5,
+            linecolor="rgba(128,128,128,0.2)", tickfont=dict(size=10),
+        ),
+        "xaxis2": dict(
+            title="Year", gridcolor="rgba(128,128,128,0.15)",
+            linecolor="rgba(128,128,128,0.2)", tickfont=dict(size=10),
+        ),
+    })
     for ann in fig.layout.annotations:
         ann.font.size = 12
     fig.update_layout(**lay)
-    st.plotly_chart(fig, use_container_width=True, config=chart_config())
+    st.plotly_chart(fig, config=chart_config())
 
     st.dataframe(pd.DataFrame({
         "Year":       data["year"].values,
         "Regime":     reg_names,
         "EV Sales (k)": (data["ev_sales"].values / 1e3).round(1),
         "YoY (%)":    data["growth_rate"].fillna(0).round(1).values,
-    }), use_container_width=True, hide_index=True)
+    }), hide_index=True)
 
     st.markdown("---")
     st.subheader("Bayesian Changepoint Detection")
@@ -142,6 +150,6 @@ def render(df: pd.DataFrame):
                         "yaxis": {**lay_cp.get("yaxis", {}), "title": "Thousand units"},
                         "showlegend": False})
         fig_cp.update_layout(**lay_cp)
-        st.plotly_chart(fig_cp, use_container_width=True, config=chart_config())
+        st.plotly_chart(fig_cp, config=chart_config())
     else:
         st.info("No structural breaks detected.")
