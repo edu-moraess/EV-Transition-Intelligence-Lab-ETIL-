@@ -115,10 +115,11 @@ def _sidebar() -> tuple[str, str, str]:
 
     st.sidebar.markdown("### Dataset")
     dataset_option = st.sidebar.radio(
-        "",
+        "Dataset",
         ["IEA 2026", "IEA 2025", "Combined (2025+2026)"],
         index=0,
         key="dataset_radio",
+        label_visibility="collapsed",
     )
     dataset_key = {
         "IEA 2026":              "2026",
@@ -128,10 +129,11 @@ def _sidebar() -> tuple[str, str, str]:
 
     st.sidebar.markdown("### Vehicle mode")
     vehicle_option = st.sidebar.selectbox(
-        "",
+        "Vehicle mode",
         ["Cars", "2 and 3 wheelers", "Total (all modes)"],
         index=0,
         key="vehicle_select",
+        label_visibility="collapsed",
     )
     vehicle_mode = {
         "Cars":                "Cars",
@@ -154,7 +156,12 @@ def _sidebar() -> tuple[str, str, str]:
         "🌐 ETII Composite Index": "streamlit_pages.10_ETII",
         "🔬 Research Intelligence":"streamlit_pages.11_Research_Intelligence",
     }
-    selection = st.sidebar.radio("", list(pages.keys()), key="nav_radio")
+    selection = st.sidebar.radio(
+        "Navigation",
+        list(pages.keys()),
+        key="nav_radio",
+        label_visibility="collapsed",
+    )
 
     st.sidebar.markdown("---")
     st.sidebar.caption(f"Dataset: {dataset_option}")
