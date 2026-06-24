@@ -93,7 +93,7 @@ def render(df: pd.DataFrame):
             lay.update({"yaxis": {**lay.get("yaxis",{}), "title": "Rank IC", "range": [-0.40, 0.60]},
                          "showlegend": False})
             fig_ic.update_layout(**lay)
-            st.plotly_chart(fig_ic, use_container_width=True, config=chart_config())
+            st.plotly_chart(fig_ic, config=chart_config())
 
     with col_b:
         st.markdown("##### Do high-EVQTI countries actually grow faster?")
@@ -116,7 +116,7 @@ def render(df: pd.DataFrame):
             lay2.update({"yaxis": {**lay2.get("yaxis",{}), "title": "Mean next-year growth (%)"},
                           "showlegend": False})
             fig_dec.update_layout(**lay2)
-            st.plotly_chart(fig_dec, use_container_width=True, config=chart_config())
+            st.plotly_chart(fig_dec, config=chart_config())
 
     st.markdown("---")
 
@@ -151,7 +151,7 @@ def render(df: pd.DataFrame):
             lay_bt.update({"yaxis": {**lay_bt.get("yaxis",{}), "title": "IC (test year)"},
                             "showlegend": False})
             fig_bt.update_layout(**lay_bt)
-            st.plotly_chart(fig_bt, use_container_width=True, config=chart_config())
+            st.plotly_chart(fig_bt, config=chart_config())
 
             recent_ic = backtest_df["ic_mean"].tail(4).mean()
             early_ic  = backtest_df["ic_mean"].head(4).mean()
@@ -194,7 +194,7 @@ def render(df: pd.DataFrame):
                   "margin": {**lay3.get("margin",{}), "r": 80},
                   "showlegend": False})
     fig_rank.update_layout(**lay3)
-    st.plotly_chart(fig_rank, use_container_width=True, config=chart_config())
+    st.plotly_chart(fig_rank, config=chart_config())
 
     st.markdown("---")
 
@@ -231,7 +231,7 @@ def render(df: pd.DataFrame):
                   "yaxis": {**lay4.get("yaxis",{}), "title": "Historical CAGR (%)"},
                   "showlegend": False})
     fig_sc.update_layout(**lay4)
-    st.plotly_chart(fig_sc, use_container_width=True, config=chart_config())
+    st.plotly_chart(fig_sc, config=chart_config())
 
     st.markdown("---")
     st.subheader("Full Table")
@@ -241,7 +241,7 @@ def render(df: pd.DataFrame):
     full["ev_sales"]    = full["ev_sales"].fillna(0).round(0).astype("Int64")
     full["growth_rate"] = full["growth_rate"].fillna(0).round(1)
     full.columns        = ["Country","Rank","EVQTI Score","CAGR (%)","EV Sales","YoY (%)"]
-    st.dataframe(full, use_container_width=True, hide_index=True)
+    st.dataframe(full, hide_index=True)
 
     with st.expander("How is EVQTI calculated?"):
         st.markdown("""
