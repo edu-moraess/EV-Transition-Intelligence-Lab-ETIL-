@@ -109,11 +109,22 @@ def get_data(dataset_key: str, vehicle_mode: str) -> pd.DataFrame:
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 def _sidebar() -> tuple[str, str, str]:
-    st.sidebar.title("⚡ ETIL")
-    st.sidebar.markdown("**EV Transition Intelligence Lab**")
-    st.sidebar.markdown("---")
+    # ── Header ──────────────────────────────────────────────────────────────
+    st.sidebar.markdown(
+        "<h1 style='margin:0 0 0.1rem 0; font-size:1.5rem; font-weight:700;'>"
+        "ETIL</h1>"
+        "<p style='margin:0 0 0.8rem 0; opacity:0.55; font-size:0.82rem;'>"
+        "EV Transition Intelligence Lab</p>",
+        unsafe_allow_html=True
+    )
 
-    st.sidebar.markdown("### Dataset")
+    # ── Dataset & Mode (compact block) ──────────────────────────────────────
+    st.sidebar.markdown(
+        "<p style='font-size:0.65rem; text-transform:uppercase; "
+        "letter-spacing:0.08em; opacity:0.4; margin:0 0 0.2rem 0;'>"
+        "Dataset</p>",
+        unsafe_allow_html=True
+    )
     dataset_option = st.sidebar.radio(
         "Dataset",
         ["IEA 2026", "IEA 2025", "Combined (2025+2026)"],
@@ -127,7 +138,12 @@ def _sidebar() -> tuple[str, str, str]:
         "Combined (2025+2026)":  "combined",
     }[dataset_option]
 
-    st.sidebar.markdown("### Vehicle mode")
+    st.sidebar.markdown(
+        "<p style='font-size:0.65rem; text-transform:uppercase; "
+        "letter-spacing:0.08em; opacity:0.4; margin:0.6rem 0 0.2rem 0;'>"
+        "Vehicle Mode</p>",
+        unsafe_allow_html=True
+    )
     vehicle_option = st.sidebar.selectbox(
         "Vehicle mode",
         ["Cars", "2 and 3 wheelers", "Total (all modes)"],
@@ -141,20 +157,27 @@ def _sidebar() -> tuple[str, str, str]:
         "Total (all modes)":   "Total",
     }[vehicle_option]
 
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Navigation")
+    st.sidebar.markdown("<hr style='margin:0.8rem 0; opacity:0.15;'>", unsafe_allow_html=True)
+
+    # ── Navigation ────────────────────────────────────────────────────────────
+    st.sidebar.markdown(
+        "<p style='font-size:0.65rem; text-transform:uppercase; "
+        "letter-spacing:0.08em; opacity:0.4; margin:0 0 0.2rem 0;'>"
+        "Navigation</p>",
+        unsafe_allow_html=True
+    )
     pages = {
-        "🌍 Global Monitor":       "streamlit_pages.01_Global_Monitor",
-        "🔬 Country Lab":          "streamlit_pages.02_Country_Lab",
-        "🧠 Diffusion Engine":     "streamlit_pages.03_Diffusion_Engine",
-        "🔄 Regime Detection":     "streamlit_pages.04_Regime_Detection",
-        "📊 Forecast Lab":         "streamlit_pages.05_Forecast_Lab",
-        "🏆 EVQTI Ranking":        "streamlit_pages.06_EVQTI_Ranking",
-        "📰 EV Pulse":             "streamlit_pages.07_EV_Pulse",
-        "🔌 Infrastructure":       "streamlit_pages.08_Infrastructure",
-        "🎯 Scenarios":            "streamlit_pages.09_Scenarios",
-        "🌐 ETII Composite Index": "streamlit_pages.10_ETII",
-        "🔬 Research Intelligence":"streamlit_pages.11_Research_Intelligence",
+        "🌍  Global Monitor":       "streamlit_pages.01_Global_Monitor",
+        "🔬  Country Lab":          "streamlit_pages.02_Country_Lab",
+        "🧠  Diffusion Engine":      "streamlit_pages.03_Diffusion_Engine",
+        "🔄  Regime Detection":     "streamlit_pages.04_Regime_Detection",
+        "📊  Forecast Lab":         "streamlit_pages.05_Forecast_Lab",
+        "🏆  EVQTI Ranking":        "streamlit_pages.06_EVQTI_Ranking",
+        "📰  EV Pulse":             "streamlit_pages.07_EV_Pulse",
+        "🔌  Infrastructure":       "streamlit_pages.08_Infrastructure",
+        "🎯  Scenarios":            "streamlit_pages.09_Scenarios",
+        "🌐  ETII Composite Index": "streamlit_pages.10_ETII",
+        "🔬  Research Intelligence": "streamlit_pages.11_Research_Intelligence",
     }
     selection = st.sidebar.radio(
         "Navigation",
@@ -163,15 +186,20 @@ def _sidebar() -> tuple[str, str, str]:
         label_visibility="collapsed",
     )
 
-    st.sidebar.markdown("---")
-    st.sidebar.caption(f"Dataset: {dataset_option}")
-    st.sidebar.caption(f"Mode: {vehicle_option}")
-    st.sidebar.caption("Source: IEA Global EV Outlook")
-    st.sidebar.markdown("---")
-    st.sidebar.caption(
-        "**Carlos Eduardo** · Quant Data Scientist  \n"
-        "[LinkedIn](https://www.linkedin.com/in/carlos-eduardo-2753a92b5) · "
-        "[GitHub](https://github.com/edu-moraess)"
+    st.sidebar.markdown("<hr style='margin:0.8rem 0; opacity:0.15;'>", unsafe_allow_html=True)
+
+    # ── Footer ────────────────────────────────────────────────────────────────
+    st.sidebar.markdown(
+        "<div style='font-size:0.72rem; opacity:0.45; line-height:1.5;'>"
+        "<b style='opacity:0.8;'>Carlos Eduardo</b><br>"
+        "Quant Data Scientist<br>"
+        "<a href='https://www.linkedin.com/in/carlos-eduardo-2753a92b5' "
+        "style='color:inherit; text-decoration:underline;'>LinkedIn</a> · "
+        "<a href='https://github.com/edu-moraess' "
+        "style='color:inherit; text-decoration:underline;'>GitHub</a><br><br>"
+        "<span style='opacity:0.6;'>v1.0 · IEA Global EV Outlook</span>"
+        "</div>",
+        unsafe_allow_html=True
     )
 
     return dataset_key, vehicle_mode, pages[selection]
