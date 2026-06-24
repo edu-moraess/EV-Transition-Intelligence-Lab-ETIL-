@@ -23,13 +23,20 @@ _DATASET_FILES = {
 
 _PROJECTION_YEARS = {2030, 2035, 2040, 2045, 2050}
 
-# Normalizado em lowercase para comparação robusta (Bug #4 fix)
+# Normalizado em lowercase para comparação robusta (Bug #4 fix v2)
+# Lista expandida com agregados do IEA 2026 que estavam faltando
 _AGGREGATE_REGIONS_LOWER = {
-    "world", "europe", "asia pacific", "advanced economies",
-    "developing economies excl. china", "european union",
-    "central and south america", "north america",
-    "rest of the world", "middle east and caspian",
-    "eu27", "other asia pacific", "other europe",
+    # Continentes / macro-regiões
+    "world", "europe", "asia pacific", "north america",
+    "central and south america", "latin america", "africa",
+    "middle east and caspian", "middle east", "caspian",
+    "southeast asia", "other asia pacific", "other europe",
+    # Grupos econômicos
+    "advanced economies", "developing economies excl. china",
+    "developing economies", "emerging economies",
+    "european union", "eu27", "eu28", "g20", "g7", "oecd",
+    # Outros agregados IEA
+    "rest of the world", "other",
 }
 
 # Powertrains elétricos por schema
@@ -60,7 +67,6 @@ class DatasetEngine:
         df_raw = pd.read_csv(path)
 
         # Detectar schema via powertrains em EV sales
-        # (2025 tem powertrain="EV" apenas em charging points — falso positivo evitado)
         sales_pts = set(df_raw.loc[df_raw["parameter"] == "EV sales", "powertrain"].unique())
         schema    = "2026" if "EV" in sales_pts else "2025"
         logger.info(f"Schema detectado: IEA {schema}")
@@ -88,8 +94,6 @@ class DatasetEngine:
         if not dfs:
             raise RuntimeError("Nenhum dataset disponível.")
 
-        # Nota: cada dataset já foi filtrado por vehicle_mode em _transform,
-        # portanto drop_duplicates por [country, year] mantém o mais recente (2026).
         combined = (
             pd.concat(dfs, ignore_index=True)
             .sort_values("data_source", ascending=False)
@@ -135,8 +139,6 @@ class DatasetEngine:
         charging    = self._sum_all(df_raw, "EV charging points", "charging_points")
 
         # Stock share e Sales share — schema-aware (Bug #3 fix)
-        # Schema 2026: powertrain="EV" já é o agregado.
-        # Schema 2025: não há "EV" agregado; somamos BEV+PHEV+FCEV como proxy.
         if schema == "2026":
             stock_share = self._mean_metric(df_raw, "EV stock share", {"EV"}, "ev_stock_share")
             sales_share = self._mean_metric(df_raw, "EV sales share", {"EV"}, "ev_sales_share")
@@ -160,9 +162,13 @@ class DatasetEngine:
         result = result.dropna(subset=["ev_sales"])
         result = result[result["ev_sales"] > 0].reset_index(drop=True)
 
-        # Filtro de agregados — normalização robusta lowercase (Bug #4 fix)
+        # Filtro de agregados — normalização robusta lowercase (Bug #4 fix v2)
         if countries_only:
             agg_mask = result["country"].str.strip().str.lower().isin(_AGGREGATE_REGIONS_LOWER)
+            n_agg = agg_mask.sum()
+            if n_agg > 0:
+                removed = result[agg_mask]["country"].unique().tolist()
+                logger.warning(f"Agregados removidos: {removed}")
             result = result[~agg_mask].reset_index(drop=True)
 
         return result
