@@ -23,6 +23,7 @@ Get a free NewsAPI key at: https://newsapi.org/register
 import streamlit as st
 import pandas as pd
 import requests
+import textwrap
 from datetime import datetime, timedelta
 
 _NEWSAPI_URL   = "https://newsapi.org/v2/everything"
@@ -187,7 +188,8 @@ _AI_ERROR_MESSAGES = {
 # ── Render ────────────────────────────────────────────────────────────────────
 
 def render(df: pd.DataFrame = None):
-    st.markdown("## ⚡ EV Pulse")
+    # FIX: remover emoji duplicado — usar título limpo
+    st.markdown("## EV Pulse")
     st.markdown(
         "Live news digest — EV market headlines with AI-generated analysis. "
         "Stories are pulled from global news sources and summarised by AI."
@@ -275,18 +277,25 @@ def render(df: pd.DataFrame = None):
         pub_at = (art.get("publishedAt") or "")[:10]
 
         with st.container():
+            # FIX: usar textwrap para truncar em palavras completas, não no meio
+            if desc:
+                # textwrap.shorten corta em palavras completas e adiciona "..."
+                shown = textwrap.shorten(desc, width=300, placeholder="...")
+            else:
+                shown = ""
+
+            # Card formatado com separação visual clara
             st.markdown(f"**{title}**")
             st.caption(f"{source} · {pub_at} · [Read full article →]({url})")
 
-            if desc:
-                shown = desc[:280] + ("..." if len(desc) > 280 else "")
-                st.markdown(f"*{shown}*")
+            if shown:
+                st.markdown(f"{shown}")
 
             if ai_on:
                 context = f"Query was '{query}'. Source: {source}. Focus on EV market implications."
                 summary_result = _ai_summary(title, desc, context, ai_key)
                 if summary_result["ok"]:
-                    st.success(f"📊 **Analysis:** {summary_result['text']}")
+                    st.info(f"📊 **Analysis:** {summary_result['text']}")
                 else:
                     ai_failures += 1
                     if ai_failures == 1:
@@ -294,6 +303,10 @@ def render(df: pd.DataFrame = None):
                             summary_result["error"], summary_result["error"]
                         )
                         st.caption(f"ℹ️ {err_msg}")
+            else:
+                # Quando AI está desligado, mostrar um teaser sutil
+                if not ai_available:
+                    st.caption("💡 *Enable AI summaries by adding an AI API key to secrets.toml*")
 
             st.markdown("---")
 
