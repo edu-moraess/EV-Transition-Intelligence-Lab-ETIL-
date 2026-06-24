@@ -54,13 +54,16 @@ _VALID_POWERTRAINS = {
 # Projection years (excluded from Historical panels)
 _PROJECTION_YEARS = {2030, 2035, 2040, 2045, 2050}
 
-# Aggregate regions to exclude from country-level analysis
-_AGGREGATE_REGIONS = {
-    "World", "Europe", "Asia Pacific", "Advanced Economies",
-    "Developing Economies Excl. China", "European Union",
-    "Central And South America", "North America",
-    "Rest Of The World", "Middle East And Caspian",
-    "Eu27", "Other Asia Pacific", "Other Europe",
+# Aggregate regions — normalizado em lowercase para comparação robusta
+_AGGREGATE_REGIONS_LOWER = {
+    "world", "europe", "asia pacific", "north america",
+    "central and south america", "latin america", "africa",
+    "middle east and caspian", "middle east", "caspian",
+    "southeast asia", "other asia pacific", "other europe",
+    "advanced economies", "developing economies excl. china",
+    "developing economies", "emerging economies",
+    "european union", "eu27", "eu28", "g20", "g7", "oecd",
+    "rest of the world", "other",
 }
 
 
@@ -133,9 +136,7 @@ class IEALoader:
         panel     = agg.build_panel(category=category, mode=mode)
 
         if countries_only:
-            panel = panel[
-                ~panel["country"].str.title().isin(_AGGREGATE_REGIONS)
-            ].reset_index(drop=True)
+            panel = self._filter_aggregates(panel)
 
         # Remove projection years from Historical panels
         if category == "Historical":
@@ -192,7 +193,11 @@ class IEALoader:
         )
         return combined
 
-    def get_aggregator(self, year: Literal[2025, 2026]) -> Aggregator:
+    def get_aggregator(
+        self,
+        year: Literal[2025, 2026],
+        countries_only: bool = True,
+    ) -> Aggregator:
         """
         Return a configured Aggregator for direct dimensional queries.
 
@@ -200,8 +205,16 @@ class IEALoader:
           agg = loader.get_aggregator(2026)
           trucks = agg.ev_sales(category='Historical', mode='Trucks')
           breakdown = agg.breakdown_by_powertrain(mode='Cars')
+
+        Parameters
+        ----------
+        countries_only : bool
+            If True, filter out aggregate regions before passing to Aggregator.
+            This prevents double-counting when summing across countries.
         """
         df_raw = self.load_raw(year)
+        if countries_only:
+            df_raw = self._filter_aggregates(df_raw, col="region_country")
         schema = self._detect_schema(df_raw)
         return Aggregator(df_raw, schema=schema)
 
@@ -297,6 +310,18 @@ class IEALoader:
         schema = "2026" if "EV" in sales_pts else "2025"
         logger.info(f"Schema detected: IEA {schema} (EV sales powertrains: {sales_pts})")
         return schema
+
+    @staticmethod
+    def _filter_aggregates(df: pd.DataFrame, col: str = "country") -> pd.DataFrame:
+        """Remove aggregate regions using robust lowercase comparison."""
+        if col not in df.columns:
+            return df
+        mask = df[col].str.strip().str.lower().isin(_AGGREGATE_REGIONS_LOWER)
+        n_agg = mask.sum()
+        if n_agg > 0:
+            removed = df[mask][col].unique().tolist()
+            logger.warning(f"Agregados removidos: {removed}")
+        return df[~mask].reset_index(drop=True)
 
 
 # ── Module-level convenience functions ───────────────────────────────────────
