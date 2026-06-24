@@ -23,10 +23,11 @@ _CHARGER_COLORS = {
 }
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=600, use_spinner=False)
 def _load_infra(dataset_year: int) -> dict:
     loader = IEALoader()
-    agg    = loader.get_aggregator(dataset_year)
+    # FIX: passar countries_only=True para filtrar agregados
+    agg    = loader.get_aggregator(dataset_year, countries_only=True)
     return {
         "cp":  agg.charging_points(category="Historical"),
         "ct":  agg.charging_by_type(category="Historical"),
@@ -124,7 +125,7 @@ def render(df: pd.DataFrame):
                       "yaxis": {**lay1.get("yaxis",{}), "title": ""},
                       "showlegend": False, "margin": {**lay1.get("margin",{}), "r": 60}})
         fig1.update_layout(**lay1)
-        st.plotly_chart(fig1, use_container_width=True, config=chart_config())
+        st.plotly_chart(fig1, config=chart_config())
 
     with col_r:
         st.markdown("### Who has the most chargers per EV?")
@@ -149,7 +150,7 @@ def render(df: pd.DataFrame):
                       "yaxis": {**lay2.get("yaxis",{}), "title": ""},
                       "showlegend": False, "margin": {**lay2.get("margin",{}), "r": 60}})
         fig2.update_layout(**lay2)
-        st.plotly_chart(fig2, use_container_width=True, config=chart_config())
+        st.plotly_chart(fig2, config=chart_config())
 
     st.markdown("---")
 
@@ -186,7 +187,7 @@ def render(df: pd.DataFrame):
         "barmode": "overlay",
     })
     fig3.update_layout(**lay3)
-    st.plotly_chart(fig3, use_container_width=True, config=chart_config())
+    st.plotly_chart(fig3, config=chart_config())
 
     st.markdown("---")
 
@@ -215,7 +216,7 @@ def render(df: pd.DataFrame):
             lay4.update({"yaxis": {**lay4.get("yaxis",{}), "title": "Thousand chargers"},
                           "showlegend": False})
             fig4.update_layout(**lay4)
-            st.plotly_chart(fig4, use_container_width=True, config=chart_config())
+            st.plotly_chart(fig4, config=chart_config())
 
         with col_b:
             st.markdown(f"##### EVs per charger — {selected}")
@@ -235,7 +236,7 @@ def render(df: pd.DataFrame):
                 lay5.update({"yaxis": {**lay5.get("yaxis",{}), "title": "EVs per charger"},
                               "showlegend": False})
                 fig5.update_layout(**lay5)
-                st.plotly_chart(fig5, use_container_width=True, config=chart_config())
+                st.plotly_chart(fig5, config=chart_config())
 
         if not ct_c.empty:
             st.markdown(f"##### Charger mix by type — {selected}")
@@ -256,7 +257,7 @@ def render(df: pd.DataFrame):
             lay6.update({"yaxis": {**lay6.get("yaxis",{}), "title": "Thousand chargers"},
                           "barmode": "stack"})
             fig6.update_layout(**lay6)
-            st.plotly_chart(fig6, use_container_width=True, config=chart_config())
+            st.plotly_chart(fig6, config=chart_config())
 
         # Infrastructure vs EV sales correlation
         ev_c = df[df["country"] == selected][["year","ev_sales"]].copy()
@@ -288,7 +289,7 @@ def render(df: pd.DataFrame):
             lay7.update({"yaxis": {**lay7.get("yaxis",{}), "title": "Growth vs baseline"},
                           "xaxis": {**lay7.get("xaxis",{}), "title": "Year"}})
             fig7.update_layout(**lay7)
-            st.plotly_chart(fig7, use_container_width=True, config=chart_config())
+            st.plotly_chart(fig7, config=chart_config())
 
         # ── Infrastructure projection ──────────────────────────────────────────
         st.markdown(f"##### Infrastructure forecast — when does {selected} reach the IEA target?")
@@ -346,7 +347,7 @@ def render(df: pd.DataFrame):
             lay8.update({"yaxis": {**lay8.get("yaxis",{}), "title": "EVs per charger (lower = better)"},
                           "xaxis": {**lay8.get("xaxis",{}), "title": "Year"}})
             fig8.update_layout(**lay8)
-            st.plotly_chart(fig8, use_container_width=True, config=chart_config())
+            st.plotly_chart(fig8, config=chart_config())
 
             if target_year:
                 current_val = float(epc_c["ev_per_charger"].iloc[-1])
