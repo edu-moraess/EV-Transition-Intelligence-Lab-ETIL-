@@ -23,10 +23,9 @@ _CHARGER_COLORS = {
 }
 
 
-@st.cache_data(ttl=600, use_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def _load_infra(dataset_year: int) -> dict:
     loader = IEALoader()
-    # FIX: passar countries_only=True para filtrar agregados
     agg    = loader.get_aggregator(dataset_year, countries_only=True)
     return {
         "cp":  agg.charging_points(category="Historical"),
