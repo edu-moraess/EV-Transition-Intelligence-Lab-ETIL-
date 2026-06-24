@@ -46,10 +46,13 @@ def render(df: pd.DataFrame):
 
     # ── Scenario builder ──────────────────────────────────────────────────────
     st.markdown("### Define your scenarios")
-    st.markdown(
-        "Adjust the sliders to define up to 3 alternative scenarios. "
-        "Each parameter adjusts the Bass model coefficient by the percentage you set."
-    )
+    
+    # FIX: encapsular texto em container para evitar vazamento entre colunas
+    with st.container():
+        st.markdown(
+            "Adjust the sliders to define up to 3 alternative scenarios. "
+            "Each parameter adjusts the Bass model coefficient by the percentage you set."
+        )
 
     col_s1, col_s2, col_s3 = st.columns(3)
 
@@ -59,18 +62,18 @@ def render(df: pd.DataFrame):
 
     with col_s2:
         st.markdown("##### 🟡 Optimistic")
-        p_opt  = st.slider("Innovation rate (p) +%", 0, 100, 30, key="p_opt",
-                           help="Higher p = stronger early adopter pull (subsidies, mandates)")
-        q_opt  = st.slider("Imitation rate (q) +%", 0, 100, 20, key="q_opt",
-                           help="Higher q = stronger network effects (more EVs visible on road)")
-        m_opt  = st.slider("Market ceiling (M) +%", 0, 100, 40, key="m_opt",
-                           help="Higher M = more infrastructure, higher income, lower EV prices")
+        p_opt = st.slider("Innovation rate (p) +%", 0, 100, 30, key="p_opt",
+                          help="Higher p = stronger early adopter pull (subsidies, mandates)")
+        q_opt = st.slider("Imitation rate (q) +%", 0, 100, 20, key="q_opt",
+                          help="Higher q = stronger network effects (more EVs visible on road)")
+        m_opt = st.slider("Market ceiling (M) +%", 0, 100, 40, key="m_opt",
+                          help="Higher M = more infrastructure, higher income, lower EV prices")
 
     with col_s3:
         st.markdown("##### 🔴 Conservative")
-        p_con  = st.slider("Innovation rate (p) -%", 0, 50, 15, key="p_con")
-        q_con  = st.slider("Imitation rate (q) -%", 0, 50, 10, key="q_con")
-        m_con  = st.slider("Market ceiling (M) -%", 0, 50, 20, key="m_con")
+        p_con = st.slider("Innovation rate (p) -%", 0, 50, 15, key="p_con")
+        q_con = st.slider("Imitation rate (q) -%", 0, 50, 10, key="q_con")
+        m_con = st.slider("Market ceiling (M) -%", 0, 50, 20, key="m_con")
 
     st.markdown("---")
 
@@ -88,7 +91,8 @@ def render(df: pd.DataFrame):
 
     except Exception as e:
         st.error(f"Scenario engine error: {e}")
-        import traceback; st.code(traceback.format_exc())
+        import traceback
+        st.code(traceback.format_exc())
         return
 
     # ── Chart: annual sales ───────────────────────────────────────────────────
@@ -141,7 +145,7 @@ def render(df: pd.DataFrame):
         con_col = "annual_sales" if "annual_sales" in conservative.columns else "sales"
         if opt_col in optimistic.columns and con_col in conservative.columns:
             merged_uc = optimistic[["year", opt_col]].merge(
-                conservative[["year", con_col]], on="year", suffixes=("_opt","_con")
+                conservative[["year", con_col]], on="year", suffixes=("_opt", "_con")
             )
             future_uc = merged_uc[merged_uc["year"] > hist_years.max()]
             if not future_uc.empty:
@@ -150,7 +154,7 @@ def render(df: pd.DataFrame):
                     y=pd.concat([future_uc[opt_col + "_opt"] / 1e3,
                                   future_uc[con_col + "_con"][::-1] / 1e3]),
                     fill="toself",
-                    fillcolor="rgba(31,81,209,0.15)",  # FIX: mais visível (era 0.08)
+                    fillcolor="rgba(31,81,209,0.15)",
                     line=dict(color="rgba(0,0,0,0)"),
                     name="Uncertainty band",
                     hoverinfo="skip",
@@ -163,8 +167,8 @@ def render(df: pd.DataFrame):
 
     lay1 = base_layout(420, f"Annual EV Sales — {selected} — Scenario Comparison")
     lay1.update({
-        "xaxis": {**lay1.get("xaxis",{}), "title": "Year"},
-        "yaxis": {**lay1.get("yaxis",{}), "title": "Thousand units / year", "rangemode": "tozero"}
+        "xaxis": {**lay1.get("xaxis", {}), "title": "Year"},
+        "yaxis": {**lay1.get("yaxis", {}), "title": "Thousand units / year", "rangemode": "tozero"}
     })
     fig1.update_layout(**lay1)
     st.plotly_chart(fig1, config=chart_config())
@@ -181,26 +185,27 @@ def render(df: pd.DataFrame):
         sales_col = "annual_sales" if "annual_sales" in sdf.columns else "sales"
         if sales_col not in sdf.columns:
             continue
-        
-        # FIX: Peak usa o cenário COMPLETO (histórico + projeção), não só future_only
+
+        # FIX: Peak usa o cenário COMPLETO (histórico + projeção)
         peak = sdf[sales_col].max()
-        
+
         # Future-only para final year e total (apenas projeção)
         future_only = sdf[sdf["year"] > hist_years.max()]
         if future_only.empty:
             continue
         final = future_only[sales_col].iloc[-1]
         total = future_only[sales_col].sum()
-        
+
         rows.append({
-            "Scenario":         name,
-            "Peak sales":       f"{peak/1e3:.0f}k",
-            f"Sales in {int(future_only['year'].iloc[-1])}": f"{final/1e3:.0f}k",
-            "Total (10yr)":     f"{total/1e6:.2f}M",
-            "vs Baseline":      "—" if name == "Baseline" else "",
+            "Scenario": name,
+            "Peak sales": f"{peak / 1e3:.0f}k",
+            f"Sales in {int(future_only['year'].iloc[-1])}": f"{final / 1e3:.0f}k",
+            "Total (10yr)": f"{total / 1e6:.2f}M",
+            "vs Baseline": "—" if name == "Baseline" else "",
         })
     if rows:
-        st.dataframe(pd.DataFrame(rows), hide_index=True)
+        summary_df = pd.DataFrame(rows)
+        st.dataframe(summary_df, hide_index=True)
 
     with st.expander("How are scenarios built?"):
         st.markdown("""
@@ -217,7 +222,7 @@ def render(df: pd.DataFrame):
 **Scenario construction:**
 - Baseline: fitted p, q, M unchanged
 - Optimistic: p × (1 + slider%), q × (1 + slider%), M × (1 + slider%)
-- Conservative: p × (1 - slider%), q × (1 - slider%), M × (1 - slider%)
+- Conservative: p × (1 − slider%), q × (1 − slider%), M × (1 − slider%)
 
 **Limitation:** Bass diffusion is a reduced-form model. It does not endogenously model
 supply constraints, competitor dynamics, or abrupt regulatory changes. Treat scenarios
