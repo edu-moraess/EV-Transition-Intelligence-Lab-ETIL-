@@ -23,12 +23,13 @@ _DATASET_FILES = {
 
 _PROJECTION_YEARS = {2030, 2035, 2040, 2045, 2050}
 
-_AGGREGATE_REGIONS = {
-    "World", "Europe", "Asia Pacific", "Advanced Economies",
-    "Developing Economies Excl. China", "European Union",
-    "Central And South America", "North America",
-    "Rest Of The World", "Middle East And Caspian",
-    "Eu27", "Other Asia Pacific", "Other Europe",
+# Normalizado em lowercase para comparação robusta (Bug #4 fix)
+_AGGREGATE_REGIONS_LOWER = {
+    "world", "europe", "asia pacific", "advanced economies",
+    "developing economies excl. china", "european union",
+    "central and south america", "north america",
+    "rest of the world", "middle east and caspian",
+    "eu27", "other asia pacific", "other europe",
 }
 
 # Powertrains elétricos por schema
@@ -87,6 +88,8 @@ class DatasetEngine:
         if not dfs:
             raise RuntimeError("Nenhum dataset disponível.")
 
+        # Nota: cada dataset já foi filtrado por vehicle_mode em _transform,
+        # portanto drop_duplicates por [country, year] mantém o mais recente (2026).
         combined = (
             pd.concat(dfs, ignore_index=True)
             .sort_values("data_source", ascending=False)
@@ -112,9 +115,10 @@ class DatasetEngine:
         # Remover anos de projeção
         df_raw = df_raw[~df_raw["year"].isin(_PROJECTION_YEARS)].copy()
 
-        # Filtro de modo de transporte
+        # Filtro de modo de transporte — normalização robusta (Bug #1 fix)
         if vehicle_mode != "Total" and "mode" in df_raw.columns:
-            df_raw = df_raw[df_raw["mode"] == vehicle_mode].copy()
+            mode_norm = vehicle_mode.strip().lower()
+            df_raw = df_raw[df_raw["mode"].str.strip().str.lower() == mode_norm].copy()
 
         if len(df_raw) == 0:
             logger.warning(f"Nenhum dado após filtros (mode={vehicle_mode}).")
@@ -130,9 +134,15 @@ class DatasetEngine:
                                         ev_pts | _ICE_POWERTRAINS, "total_sales")
         charging    = self._sum_all(df_raw, "EV charging points", "charging_points")
 
-        # Stock share e Sales share — ambos os schemas usam powertrain="EV" para estes campos
-        stock_share = self._mean_metric(df_raw, "EV stock share", {"EV"}, "ev_stock_share")
-        sales_share = self._mean_metric(df_raw, "EV sales share", {"EV"}, "ev_sales_share")
+        # Stock share e Sales share — schema-aware (Bug #3 fix)
+        # Schema 2026: powertrain="EV" já é o agregado.
+        # Schema 2025: não há "EV" agregado; somamos BEV+PHEV+FCEV como proxy.
+        if schema == "2026":
+            stock_share = self._mean_metric(df_raw, "EV stock share", {"EV"}, "ev_stock_share")
+            sales_share = self._mean_metric(df_raw, "EV sales share", {"EV"}, "ev_sales_share")
+        else:
+            stock_share = self._sum_metric(df_raw, "EV stock share", _EV_POWERTRAINS_2025, "ev_stock_share")
+            sales_share = self._sum_metric(df_raw, "EV sales share", _EV_POWERTRAINS_2025, "ev_sales_share")
 
         result = (
             ev_sales
@@ -150,10 +160,10 @@ class DatasetEngine:
         result = result.dropna(subset=["ev_sales"])
         result = result[result["ev_sales"] > 0].reset_index(drop=True)
 
+        # Filtro de agregados — normalização robusta lowercase (Bug #4 fix)
         if countries_only:
-            result = result[
-                ~result["country"].str.title().isin(_AGGREGATE_REGIONS)
-            ].reset_index(drop=True)
+            agg_mask = result["country"].str.strip().str.lower().isin(_AGGREGATE_REGIONS_LOWER)
+            result = result[~agg_mask].reset_index(drop=True)
 
         return result
 
@@ -172,15 +182,6 @@ class DatasetEngine:
         return (
             df[mask].groupby(["region_country","year"])["value"]
             .mean().reset_index()
-            .rename(columns={"region_country":"country","value":col})
-        )
-
-    def _mean_all_ev(self, df, parameter, ev_pts, col):
-        """Para schema 2025: soma BEV+PHEV+FCEV e usa como proxy do share EV total."""
-        mask = (df["parameter"] == parameter) & (df["powertrain"].isin(ev_pts))
-        return (
-            df[mask].groupby(["region_country","year"])["value"]
-            .sum().reset_index()
             .rename(columns={"region_country":"country","value":col})
         )
 
