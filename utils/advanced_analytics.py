@@ -55,7 +55,6 @@ def calculate_etri(df: pd.DataFrame) -> pd.DataFrame:
         df["ETRI"] = 50.0
         return df
 
-    # Redistribute weights proportionally
     total_w = sum(available.values())
     scaled_weights = {k: v / total_w for k, v in available.items()}
 
@@ -91,7 +90,6 @@ def calculate_etri(df: pd.DataFrame) -> pd.DataFrame:
             score += w * normalize_positive(df["growth_rate"].astype(float))
         elif var == "cagr":
             score += w * normalize_positive(df["cagr"].astype(float))
-        # momentum not used if missing
 
     df["ETRI"] = score * 100
 
@@ -103,10 +101,6 @@ def calculate_etri(df: pd.DataFrame) -> pd.DataFrame:
 
 def country_clustering(df: pd.DataFrame, method: str = "kmeans", n_clusters: int = None,
                        dbscan_eps: float = 0.5, dbscan_min_samples: int = 5) -> pd.DataFrame:
-    """
-    Cluster countries based on EV adoption, economics, and infrastructure.
-    Returns a DataFrame with 'cluster' column.
-    """
     feature_cols = [
         "ev_sales", "ev_stock", "penetration", "growth_rate",
         "charging_points_per_100k", "gdp_per_capita", "population"
@@ -155,13 +149,8 @@ def country_clustering(df: pd.DataFrame, method: str = "kmeans", n_clusters: int
 
 
 def auto_name_clusters(df_clustered: pd.DataFrame) -> dict:
-    """
-    Generate descriptive names for clusters based on available features.
-    Dynamically adapts to missing columns.
-    """
     latest = df_clustered.sort_values("year").groupby("country").last().reset_index()
 
-    # Build aggregation dictionary from available columns
     agg_dict = {}
     if "ev_sales" in latest.columns:
         agg_dict["ev_sales_mean"] = ("ev_sales", "mean")
@@ -173,7 +162,6 @@ def auto_name_clusters(df_clustered: pd.DataFrame) -> dict:
         agg_dict["growth_mean"] = ("growth_rate", "mean")
 
     if not agg_dict:
-        # Fallback: name by cluster size
         counts = latest["cluster"].value_counts().to_dict()
         return {str(c): f"Cluster {c} ({cnt} countries)" for c, cnt in counts.items()}
 
@@ -198,13 +186,13 @@ def auto_name_clusters(df_clustered: pd.DataFrame) -> dict:
 
 def project_scenario(df: pd.DataFrame, adjustments: dict) -> pd.DataFrame:
     """
-    Adjust base year data with scenario parameters (sliders) and project
+    Adjust base year data with scenario parameters and project
     EV sales/stock/penetration using simple elasticity assumptions.
+    Only modifies columns that exist in the dataset.
     """
     base_year = df["year"].max()
     base = df[df["year"] == base_year].copy()
 
-    # elasticities (approximate)
     oil_elasticity = -0.02
     lithium_elasticity = -0.015
     interest_elasticity = -0.03
@@ -226,17 +214,17 @@ def project_scenario(df: pd.DataFrame, adjustments: dict) -> pd.DataFrame:
     if "gdp_growth_change" in adjustments:
         factors *= 1 + gdp_elasticity * adjustments["gdp_growth_change"] / 100
 
-    base["ev_sales"] = base["ev_sales"] * factors
-    base["ev_stock"] = base["ev_stock"] * factors
+    # Only update columns that exist
+    if "ev_sales" in base.columns:
+        base["ev_sales"] = base["ev_sales"] * factors
+    if "ev_stock" in base.columns:
+        base["ev_stock"] = base["ev_stock"] * factors
     if "penetration" in base.columns:
         base["penetration"] = base["penetration"] * factors.clip(0, None)
     return base
 
 
 def perform_shap_explain(df: pd.DataFrame, target_col: str = "ev_sales"):
-    """
-    Train a RandomForest model and return SHAP explainer and values.
-    """
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.model_selection import train_test_split
     import shap
@@ -266,9 +254,6 @@ def perform_shap_explain(df: pd.DataFrame, target_col: str = "ev_sales"):
 
 
 def detect_anomalies(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Run multiple anomaly detectors and return a combined anomaly flag.
-    """
     feature_cols = [
         "ev_sales", "ev_stock", "penetration", "growth_rate",
         "charging_points_per_100k", "gdp_per_capita", "population"
