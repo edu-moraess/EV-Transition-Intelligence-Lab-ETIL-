@@ -149,8 +149,14 @@ def country_clustering(df: pd.DataFrame, method: str = "kmeans", n_clusters: int
 
 
 def auto_name_clusters(df_clustered: pd.DataFrame) -> dict:
+    """
+    Generate descriptive names for clusters based on available features.
+    Now with refined thresholds, handling of single-country clusters,
+    and fallback naming.
+    """
     latest = df_clustered.sort_values("year").groupby("country").last().reset_index()
 
+    # Build aggregation dictionary from available columns
     agg_dict = {}
     if "ev_sales" in latest.columns:
         agg_dict["ev_sales_mean"] = ("ev_sales", "mean")
@@ -167,20 +173,33 @@ def auto_name_clusters(df_clustered: pd.DataFrame) -> dict:
 
     cluster_profiles = latest.groupby("cluster").agg(**agg_dict)
 
+    # Count countries per cluster
+    cluster_counts = latest["cluster"].value_counts()
+
     names = {}
     for cluster, row in cluster_profiles.iterrows():
         penetration = row.get("penetration_mean", np.nan)
         growth = row.get("growth_mean", np.nan)
         gdp = row.get("gdp_mean", np.nan)
+        count = cluster_counts.get(cluster, 0)
 
+        # Special handling for single-country clusters: name them uniquely
+        if count == 1:
+            country = latest[latest["cluster"] == cluster]["country"].values[0]
+            names[cluster] = f"Unique Profile: {country}"
+            continue
+
+        # Heuristic naming based on available columns
         if not np.isnan(penetration) and penetration > 30:
-            names[cluster] = "Early Leaders"
+            names[cluster] = "Mature Leaders"
+        elif not np.isnan(penetration) and penetration > 15:
+            names[cluster] = "Established Adopters"
         elif not np.isnan(growth) and growth > 20:
-            names[cluster] = "Fast Growing"
+            names[cluster] = "Fast Growers"
         elif not np.isnan(gdp) and gdp < 5000:
             names[cluster] = "Emerging Markets"
         else:
-            names[cluster] = "Late Adopters"
+            names[cluster] = "Steady Adopters"
     return names
 
 
@@ -214,7 +233,6 @@ def project_scenario(df: pd.DataFrame, adjustments: dict) -> pd.DataFrame:
     if "gdp_growth_change" in adjustments:
         factors *= 1 + gdp_elasticity * adjustments["gdp_growth_change"] / 100
 
-    # Only update columns that exist
     if "ev_sales" in base.columns:
         base["ev_sales"] = base["ev_sales"] * factors
     if "ev_stock" in base.columns:
