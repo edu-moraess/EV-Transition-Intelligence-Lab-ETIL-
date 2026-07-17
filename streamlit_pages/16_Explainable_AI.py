@@ -42,29 +42,43 @@ def render(df: pd.DataFrame):
 
     # ── SHAP Summary ──────────────────────────────────────────────────────────
     st.subheader("🔍 SHAP Summary Plot")
-    shap.summary_plot(shap_values, X_test, show=False)
-    st.pyplot(bbox_inches='tight')
-    plt.clf()
+    try:
+        shap.summary_plot(shap_values, X_test, show=False)
+        fig = plt.gcf()
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.clf()
+    except Exception as e:
+        st.warning(f"Could not generate summary plot: {e}")
 
     # ── Dependence Plot ───────────────────────────────────────────────────────
     st.subheader("📈 SHAP Dependence Plot")
     selected_feature = st.selectbox("Select feature", features)
-    shap.dependence_plot(selected_feature, shap_values, X_test, show=False)
-    st.pyplot(bbox_inches='tight')
-    plt.clf()
+    try:
+        shap.dependence_plot(selected_feature, shap_values, X_test, show=False)
+        fig = plt.gcf()
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.clf()
+    except Exception as e:
+        st.warning(f"Could not generate dependence plot: {e}")
 
     # ── Individual Explanation ────────────────────────────────────────────────
     st.subheader("💧 Waterfall Plot (Single Prediction)")
     idx = st.slider("Select observation index", 0, len(X_test)-1, 0)
+
     try:
-        if hasattr(shap, "waterfall_plot"):
-            shap.waterfall_plot(shap.Explanation(values=shap_values[idx],
-                                                 base_values=explainer.expected_value,
-                                                 data=X_test.iloc[idx],
-                                                 feature_names=features))
-        else:
-            shap.force_plot(explainer.expected_value, shap_values[idx,:], X_test.iloc[idx,:], matplotlib=True, show=False)
-        st.pyplot(bbox_inches='tight')
+        # Build Explanation object correctly
+        exp = shap.Explanation(
+            values=shap_values[idx],
+            base_values=explainer.expected_value,
+            data=X_test.iloc[idx].values,   # <- must be a 1D array
+            feature_names=features
+        )
+        shap.waterfall_plot(exp, max_display=10)
+        fig = plt.gcf()
+        fig.tight_layout()
+        st.pyplot(fig)
         plt.clf()
     except Exception as e:
         st.warning(f"Could not generate waterfall plot: {e}")
@@ -73,11 +87,29 @@ def render(df: pd.DataFrame):
     st.subheader("📝 Text Explanation")
     # Identify top positive/negative features for the selected instance
     vals = shap_values[idx]
-    top_pos_idx = np.argsort(vals)[-3:][::-1]
-    top_neg_idx = np.argsort(vals)[:3]
-    explanation = f"For this observation, the predicted {target} is pushed **higher** by: "
-    explanation += ", ".join([f"{features[i]} (SHAP +{vals[i]:.2f})" for i in top_pos_idx])
-    explanation += ". **Lower** by: "
-    explanation += ", ".join([f"{features[i]} (SHAP {vals[i]:.2f})" for i in top_neg_idx])
+    # Sort indices by magnitude (descending)
+    sorted_idx = np.argsort(np.abs(vals))[::-1]
+    top_positive = []
+    top_negative = []
+    for i in sorted_idx:
+        if vals[i] > 0.01 * np.std(vals):   # ignore tiny contributions
+            top_positive.append((features[i], vals[i]))
+        elif vals[i] < -0.01 * np.std(vals):
+            top_negative.append((features[i], vals[i]))
+        if len(top_positive) >= 3 and len(top_negative) >= 3:
+            break
+
+    explanation = ""
+    if top_positive:
+        explanation += "This prediction is **increased** by: "
+        explanation += ", ".join([f"{feat} (+{val:.1f})" for feat, val in top_positive[:3]])
+        explanation += ". "
+    if top_negative:
+        explanation += "It is **decreased** by: "
+        explanation += ", ".join([f"{feat} ({val:.1f})" for feat, val in top_negative[:3]])
+        explanation += "."
+    if not explanation:
+        explanation = "All features have negligible impact on this prediction."
+
     st.write(explanation)
     st.info("SHAP values represent the contribution of each feature to the prediction relative to the average prediction.")
