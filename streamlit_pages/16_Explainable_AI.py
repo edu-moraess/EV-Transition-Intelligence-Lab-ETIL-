@@ -63,4 +63,4 @@ def render(df: pd.DataFrame):
 
     st.markdown("""**Interpretation:**  
     The waterfall/force plot shows how each feature pushes the prediction away from the base value.  
-    Red/positive contributions increase the predicted EV sales, blue/negative contributions decrease them.""")
+    Red/positive contributions increase the predicted EV sales, blue/negative contributions decrease them.""") 
