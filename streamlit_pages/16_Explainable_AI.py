@@ -6,8 +6,6 @@ import shap
 from utils.advanced_analytics import perform_shap_explain
 import pandas as pd
 
-st.set_option('deprecation.showPyplotGlobalUse', False)
-
 def render(df: pd.DataFrame):
     st.title("🤖 Explainable AI")
     st.markdown("Understand what drives EV sales predictions with SHAP.")
