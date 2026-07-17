@@ -11,9 +11,9 @@ Provides:
 """
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans, DBSCAN
-from sklearn.metrics import silhouette_score, davies_bouldin_score
+from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
@@ -30,10 +30,9 @@ def _safe_series(df: pd.DataFrame, col: str) -> pd.Series:
 
 def calculate_etri(df: pd.DataFrame) -> pd.DataFrame:
     """
-    EV Transition Risk Index (0–100, lower risk = higher score? We reverse: 0 = high risk, 100 = low risk).
+    EV Transition Risk Index (0–100, higher = better transition readiness).
     Adapts automatically to missing columns.
     """
-    # Core variables (prefer existing columns)
     vars_ideal = {
         "ev_stock_share": 0.20,
         "ev_sales_share": 0.15,
@@ -44,13 +43,12 @@ def calculate_etri(df: pd.DataFrame) -> pd.DataFrame:
         "oil_dependence": 0.10,
         "growth_rate": 0.10,
         "cagr": 0.05,
-        "momentum": 0.00,  # will be derived if missing
+        "momentum": 0.00,
     }
     available = {}
     for var in vars_ideal:
-        if var in df.columns:
-            if df[var].notna().sum() > 0:
-                available[var] = vars_ideal[var]
+        if var in df.columns and df[var].notna().sum() > 0:
+            available[var] = vars_ideal[var]
 
     if not available:
         logger.warning("No valid variables for ETRI. Returning neutral scores.")
@@ -93,6 +91,7 @@ def calculate_etri(df: pd.DataFrame) -> pd.DataFrame:
             score += w * normalize_positive(df["growth_rate"].astype(float))
         elif var == "cagr":
             score += w * normalize_positive(df["cagr"].astype(float))
+        # momentum not used if missing
 
     df["ETRI"] = score * 100
 
@@ -104,6 +103,10 @@ def calculate_etri(df: pd.DataFrame) -> pd.DataFrame:
 
 def country_clustering(df: pd.DataFrame, method: str = "kmeans", n_clusters: int = None,
                        dbscan_eps: float = 0.5, dbscan_min_samples: int = 5) -> pd.DataFrame:
+    """
+    Cluster countries based on EV adoption, economics, and infrastructure.
+    Returns a DataFrame with 'cluster' column.
+    """
     feature_cols = [
         "ev_sales", "ev_stock", "penetration", "growth_rate",
         "charging_points_per_100k", "gdp_per_capita", "population"
@@ -152,20 +155,41 @@ def country_clustering(df: pd.DataFrame, method: str = "kmeans", n_clusters: int
 
 
 def auto_name_clusters(df_clustered: pd.DataFrame) -> dict:
+    """
+    Generate descriptive names for clusters based on available features.
+    Dynamically adapts to missing columns.
+    """
     latest = df_clustered.sort_values("year").groupby("country").last().reset_index()
-    cluster_profiles = latest.groupby("cluster").agg(
-        ev_sales_mean=("ev_sales", "mean"),
-        penetration_mean=("penetration", "mean"),
-        gdp_mean=("gdp_per_capita", "mean"),
-        growth_mean=("growth_rate", "mean"),
-    )
+
+    # Build aggregation dictionary from available columns
+    agg_dict = {}
+    if "ev_sales" in latest.columns:
+        agg_dict["ev_sales_mean"] = ("ev_sales", "mean")
+    if "penetration" in latest.columns:
+        agg_dict["penetration_mean"] = ("penetration", "mean")
+    if "gdp_per_capita" in latest.columns:
+        agg_dict["gdp_mean"] = ("gdp_per_capita", "mean")
+    if "growth_rate" in latest.columns:
+        agg_dict["growth_mean"] = ("growth_rate", "mean")
+
+    if not agg_dict:
+        # Fallback: name by cluster size
+        counts = latest["cluster"].value_counts().to_dict()
+        return {str(c): f"Cluster {c} ({cnt} countries)" for c, cnt in counts.items()}
+
+    cluster_profiles = latest.groupby("cluster").agg(**agg_dict)
+
     names = {}
     for cluster, row in cluster_profiles.iterrows():
-        if row["penetration_mean"] > 30:
+        penetration = row.get("penetration_mean", np.nan)
+        growth = row.get("growth_mean", np.nan)
+        gdp = row.get("gdp_mean", np.nan)
+
+        if not np.isnan(penetration) and penetration > 30:
             names[cluster] = "Early Leaders"
-        elif row["growth_mean"] > 20:
+        elif not np.isnan(growth) and growth > 20:
             names[cluster] = "Fast Growing"
-        elif row["gdp_mean"] < 5000:
+        elif not np.isnan(gdp) and gdp < 5000:
             names[cluster] = "Emerging Markets"
         else:
             names[cluster] = "Late Adopters"
@@ -173,9 +197,14 @@ def auto_name_clusters(df_clustered: pd.DataFrame) -> dict:
 
 
 def project_scenario(df: pd.DataFrame, adjustments: dict) -> pd.DataFrame:
+    """
+    Adjust base year data with scenario parameters (sliders) and project
+    EV sales/stock/penetration using simple elasticity assumptions.
+    """
     base_year = df["year"].max()
     base = df[df["year"] == base_year].copy()
 
+    # elasticities (approximate)
     oil_elasticity = -0.02
     lithium_elasticity = -0.015
     interest_elasticity = -0.03
@@ -205,6 +234,9 @@ def project_scenario(df: pd.DataFrame, adjustments: dict) -> pd.DataFrame:
 
 
 def perform_shap_explain(df: pd.DataFrame, target_col: str = "ev_sales"):
+    """
+    Train a RandomForest model and return SHAP explainer and values.
+    """
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.model_selection import train_test_split
     import shap
@@ -234,6 +266,9 @@ def perform_shap_explain(df: pd.DataFrame, target_col: str = "ev_sales"):
 
 
 def detect_anomalies(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Run multiple anomaly detectors and return a combined anomaly flag.
+    """
     feature_cols = [
         "ev_sales", "ev_stock", "penetration", "growth_rate",
         "charging_points_per_100k", "gdp_per_capita", "population"
