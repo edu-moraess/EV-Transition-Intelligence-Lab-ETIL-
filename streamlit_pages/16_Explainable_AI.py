@@ -32,6 +32,7 @@ def render(df: pd.DataFrame):
     ax.barh(imp_df["Feature"], imp_df["Importance"])
     ax.set_xlabel("Importance")
     st.pyplot(fig)
+    plt.close(fig)
 
     st.subheader("SHAP Summary Plot")
     shap.summary_plot(shap_values, X_test, show=False)
@@ -44,13 +45,22 @@ def render(df: pd.DataFrame):
     st.pyplot(bbox_inches='tight')
     plt.clf()
 
-    st.subheader("Force Plot (First observation)")
-    idx = 0
-    shap.initjs()
-    force_plot = shap.force_plot(explainer.expected_value, shap_values[idx,:], X_test.iloc[idx,:], matplotlib=True)
-    st.pyplot(force_plot)
-    plt.clf()
+    st.subheader("Waterfall Plot (First observation)")
+    try:
+        # Use the new waterfall API if available (SHAP ≥0.42), else fallback to force plot
+        if hasattr(shap, "waterfall_plot"):
+            shap.waterfall_plot(shap.Explanation(values=shap_values[0],
+                                                 base_values=explainer.expected_value,
+                                                 data=X_test.iloc[0],
+                                                 feature_names=features))
+        else:
+            # Fallback to force plot with matplotlib (no initjs needed)
+            shap.force_plot(explainer.expected_value, shap_values[0,:], X_test.iloc[0,:], matplotlib=True, show=False)
+        st.pyplot(bbox_inches='tight')
+        plt.clf()
+    except Exception as e:
+        st.warning(f"Could not generate individual explanation plot: {e}")
 
     st.markdown("""**Interpretation:**  
-    The force plot shows how each feature pushes the prediction away from the base value.  
-    Red arrows increase the predicted EV sales, blue arrows decrease them.""")
+    The waterfall/force plot shows how each feature pushes the prediction away from the base value.  
+    Red/positive contributions increase the predicted EV sales, blue/negative contributions decrease them.""")
