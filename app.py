@@ -126,13 +126,6 @@ def _sidebar() -> tuple[str | None, str | None, str]:
         "🎯  Scenarios":            "streamlit_pages.09_Scenarios",
         "🌐  ETII Composite Index": "streamlit_pages.10_ETII",
         "🔬  Research Intelligence": "streamlit_pages.11_Research_Intelligence",
-        # New advanced modules
-        "⚠️  ETRI":                 "streamlit_pages.12_ETRI",
-        "🧩  Clustering":           "streamlit_pages.13_Clustering",
-        "🔮  Scenario Simulator":   "streamlit_pages.14_Scenario_Simulator",
-        "🌡️  Global Heatmap":       "streamlit_pages.15_Global_Heatmap",
-        "🤖  Explainable AI":       "streamlit_pages.16_Explainable_AI",
-        "🕵️  Anomaly Detection":    "streamlit_pages.17_Anomaly_Detection",
     }
     selection = st.sidebar.radio(
         "Navigation",
