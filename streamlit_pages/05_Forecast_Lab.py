@@ -10,9 +10,8 @@ _SCENARIO_COLOR  = {"base": NAVY, "optimistic": GREEN_MED, "pessimistic": RED_DA
 _SCENARIO_FACTOR = {"base": 1.0,  "optimistic": 1.25,      "pessimistic": 0.75}
 
 
-def render(df: pd.DataFrame, embedded: bool = False):
-    if not embedded:
-        st.markdown("## Forecast Lab")
+def render(df: pd.DataFrame):
+    st.markdown("## Forecast Lab")
     st.markdown(
         "Point forecasts are misleading. Instead, we use a **Bayesian Gaussian Process** to model "
         "the trend with uncertainty, then run **2,000 Monte Carlo simulations** to produce "
@@ -110,7 +109,7 @@ def render(df: pd.DataFrame, embedded: bool = False):
     lay.update({"xaxis": {**lay.get("xaxis", {}), "title": "Year"},
                  "yaxis": {**lay.get("yaxis", {}), "title": "Thousand units"}})
     fig.update_layout(**lay)
-    st.plotly_chart(fig, width="stretch", config=chart_config())
+    st.plotly_chart(fig, use_container_width=True, config=chart_config())
 
     # ── Terminal distribution ──────────────────────────────────────────────
     st.markdown(f"#### Terminal Distribution — {yrs_f[-1]}")
@@ -132,7 +131,7 @@ def render(df: pd.DataFrame, embedded: bool = False):
                        "yaxis": {**lay_h.get("yaxis", {}), "title": "Frequency"},
                        "showlegend": False})
         fig_h.update_layout(**lay_h)
-        st.plotly_chart(fig_h, width="stretch", config=chart_config())
+        st.plotly_chart(fig_h, use_container_width=True, config=chart_config())
 
     with col_pct:
         st.markdown("**Percentiles**")
@@ -149,4 +148,4 @@ def render(df: pd.DataFrame, embedded: bool = False):
         "P75":  round(float(np.percentile(sims[:, i] / 1e3, 75)), 1),
         "P90":  round(float(np.percentile(sims[:, i] / 1e3, 90)), 1),
     } for i, yr in enumerate(yrs_f)]
-    st.dataframe(pd.DataFrame(pct_rows), width="stretch", hide_index=True)
+    st.dataframe(pd.DataFrame(pct_rows), use_container_width=True, hide_index=True)

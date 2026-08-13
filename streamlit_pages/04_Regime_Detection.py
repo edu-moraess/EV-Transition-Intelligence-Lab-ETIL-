@@ -5,15 +5,14 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from models.regimes import HMMRegimeDetector, BayesianChangePoint
-from visualization.theme import chart_config, base_layout, NAVY, NAVY_LIGHT, RED_DARK, GREEN_MED, AMBER, SLATE
+from visualization.theme import chart_config, base_layout, NAVY, NAVY_LIGHT, RED_DARK, GREEN_MED, AMBER, SLATE, BORDER
 
 _REGIME_LABELS = {0: "Emerging", 1: "Expansion", 2: "Acceleration", 3: "Maturity", 4: "Peak"}
 _REGIME_COLORS = {0: SLATE, 1: NAVY_LIGHT, 2: GREEN_MED, 3: AMBER, 4: RED_DARK}
 
 
-def render(df: pd.DataFrame, embedded: bool = False):
-    if not embedded:
-        st.markdown("## Regime Detection")
+def render(df: pd.DataFrame):
+    st.markdown("## Regime Detection")
     st.markdown(
         "Not all EV markets are in the same phase. A **Gaussian Mixture Model** classifies each "
         "year in a country's history into one of four ordered adoption regimes — Emerging, Expansion, "

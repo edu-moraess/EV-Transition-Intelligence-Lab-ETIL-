@@ -10,3 +10,11 @@ seaborn>=0.13.0
 openpyxl>=3.1.0
 pytest>=7.4.0
 python-dotenv>=1.0.0
+
+# Advanced ML & Analytics
+shap>=0.42.0
+lightgbm>=3.3.5
+xgboost>=1.7.5
+catboost>=1.2
+hdbscan>=0.8.33
+umap-learn>=0.5.3

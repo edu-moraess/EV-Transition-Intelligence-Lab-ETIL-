@@ -96,14 +96,6 @@ def render(df: pd.DataFrame):
             "urbanization and economic momentum. These figures from the World Bank "
             "provide context for interpreting the EV trends above."
         )
-        observation_years = [value for key, value in fundamentals.items() if key.endswith("_year")]
-        observation_period = (
-            f"{min(observation_years)}–{max(observation_years)}" if observation_years else "not reported"
-        )
-        st.caption(
-            f"Source: World Bank Indicators API · Observations: {observation_period} · "
-            f"Retrieved: {fundamentals.get('retrieved_at', 'not available')}"
-        )
         wb1, wb2, wb3, wb4, wb5 = st.columns(5)
         if "gdp_per_capita" in fundamentals:
             wb1.metric("GDP per capita",
@@ -147,7 +139,7 @@ def render(df: pd.DataFrame):
         lay = base_layout(280, "Annual EV Sales (thousand units)")
         lay.update({"yaxis": {**lay.get("yaxis",{}), "title": "k units"}, "showlegend": False})
         fig.update_layout(**lay)
-        st.plotly_chart(fig, width="stretch", config=chart_config())
+        st.plotly_chart(fig, use_container_width=True, config=chart_config())
 
     with col_r:
         gr_vals = data["growth_rate"].fillna(0)
@@ -159,7 +151,7 @@ def render(df: pd.DataFrame):
         lay2 = base_layout(280, "Year-on-Year Growth (%)")
         lay2.update({"yaxis": {**lay2.get("yaxis",{}), "title": "%"}, "showlegend": False})
         fig2.update_layout(**lay2)
-        st.plotly_chart(fig2, width="stretch", config=chart_config())
+        st.plotly_chart(fig2, use_container_width=True, config=chart_config())
 
     # ── Stock share + Sales share ──────────────────────────────────────────────
     col_share1, col_share2 = st.columns(2)
@@ -190,7 +182,7 @@ def render(df: pd.DataFrame):
             lay3.update({"yaxis": {**lay3.get("yaxis",{}), "title": "% of fleet"},
                           "showlegend": False})
             fig3.update_layout(**lay3)
-            st.plotly_chart(fig3, width="stretch", config=chart_config())
+            st.plotly_chart(fig3, use_container_width=True, config=chart_config())
 
     with col_share2:
         if "ev_sales_share" in data.columns and data["ev_sales_share"].notna().any():
@@ -217,7 +209,7 @@ def render(df: pd.DataFrame):
             lay_ss.update({"yaxis": {**lay_ss.get("yaxis",{}), "title": "% of new car sales"},
                             "showlegend": False})
             fig_ss.update_layout(**lay_ss)
-            st.plotly_chart(fig_ss, width="stretch", config=chart_config())
+            st.plotly_chart(fig_ss, use_container_width=True, config=chart_config())
         elif "ev_stock_share" not in data.columns or not data["ev_stock_share"].notna().any():
             st.info("EV share data not available for this country/dataset.")
 
@@ -241,16 +233,16 @@ def render(df: pd.DataFrame):
             lay_m.update({"yaxis": {**lay_m.get("yaxis",{}), "title": "pp change"},
                            "showlegend": False})
             fig_mom.update_layout(**lay_m)
-            st.plotly_chart(fig_mom, width="stretch", config=chart_config())
+            st.plotly_chart(fig_mom, use_container_width=True, config=chart_config())
         with col_m2:
             # Gauge: current momentum
             latest_mom = float(data["momentum_3y"].dropna().iloc[-1]) if data["momentum_3y"].notna().any() else 0
             if latest_mom > 5:
-                st.success(f"**Accelerating** — momentum +{latest_mom:.1f}pp over last 3 years. Growth is picking up speed.")
+                st.success(f"🚀 **Accelerating** — momentum +{latest_mom:.1f}pp over last 3 years. Growth is picking up speed.")
             elif latest_mom < -5:
-                st.warning(f"**Decelerating** — momentum {latest_mom:.1f}pp over last 3 years. Growth is slowing down.")
+                st.warning(f"⚠️ **Decelerating** — momentum {latest_mom:.1f}pp over last 3 years. Growth is slowing down.")
             else:
-                st.info(f"**Stable** — momentum {latest_mom:+.1f}pp over last 3 years. Growth rate is roughly steady.")
+                st.info(f"➡️ **Stable** — momentum {latest_mom:+.1f}pp over last 3 years. Growth rate is roughly steady.")
             st.caption("Momentum = average change in YoY growth rate over the last 3 years.")
 
     st.markdown("---")
@@ -310,11 +302,11 @@ def render(df: pd.DataFrame):
                              color="rgba(128,128,128,0.6)",
                              activecolor="rgba(31,58,110,0.9)"),
             )
-            st.plotly_chart(fig_fuel, width="stretch", config=chart_config())
+            st.plotly_chart(fig_fuel, use_container_width=True, config=chart_config())
 
             if fs.get("gasoline_yoy_pct") is not None:
                 direction = "up" if fs["gasoline_yoy_pct"] > 0 else "down"
-                color_txt = ""
+                color_txt = "🔴" if direction == "up" else "🟢"
                 st.caption(
                     f"{color_txt} Gasoline in **{selected}** is **{direction}** "
                     f"{abs(fs['gasoline_yoy_pct']):.1f}% year-on-year "
@@ -323,7 +315,7 @@ def render(df: pd.DataFrame):
                 )
     else:
         st.caption(
-            f"Fuel price data not available for {selected}. "
+            f"ℹ️ Fuel price data not available for {selected}. "
             f"IEA Energy Prices covers {len(fuel_countries)} countries."
         )
 
@@ -392,7 +384,7 @@ def render(df: pd.DataFrame):
     lay_d.update({"xaxis": {**lay_d.get("xaxis",{}), "title": "Year"},
                    "yaxis": {**lay_d.get("yaxis",{}), "title": "Thousand units (cumulative)"}})
     fig_d.update_layout(**lay_d)
-    st.plotly_chart(fig_d, width="stretch", config=chart_config())
+    st.plotly_chart(fig_d, use_container_width=True, config=chart_config())
 
     st.markdown("---")
 
@@ -417,7 +409,9 @@ def render(df: pd.DataFrame):
         # Show current regime with explanation
         regime_col, explain_col = st.columns([1, 2])
         with regime_col:
-            st.metric("Current regime", current_regime)
+            regime_colors = {"Emerging": "🔵", "Expansion": "🟢", "Acceleration": "🟡", "Maturity": "🔴"}
+            icon = regime_colors.get(current_regime, "⚪")
+            st.metric("Current regime", f"{icon} {current_regime}")
         with explain_col:
             st.info(_REGIME_EXPLAINER.get(current_regime, ""))
 
@@ -438,4 +432,4 @@ def render(df: pd.DataFrame):
         lay_r.update({"xaxis": {**lay_r.get("xaxis",{}), "title": "Year"},
                        "yaxis": {**lay_r.get("yaxis",{}), "title": "Thousand units"}})
         fig_r.update_layout(**lay_r)
-        st.plotly_chart(fig_r, width="stretch", config=chart_config())
+        st.plotly_chart(fig_r, use_container_width=True, config=chart_config())

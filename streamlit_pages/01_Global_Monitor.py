@@ -2,11 +2,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
 from analytics.global_ranking import GlobalRanking
 from visualization.theme import (
-    chart_config, base_layout, NAVY, NAVY_LIGHT, NAVY_PALE, GREEN_MED, AMBER, GOLD, SLATE, SEQ_MAP,
+    chart_config, base_layout, bar_color_signed,
+    NAVY, NAVY_LIGHT, NAVY_PALE, RED_DARK, GREEN_MED, AMBER, GOLD, SLATE,
 )
 
 _REGIONS = {
@@ -32,12 +32,12 @@ def render(df: pd.DataFrame):
     dataset = df.attrs.get("dataset", "IEA 2026")
     mode    = df.attrs.get("vehicle_mode", "Cars")
 
-    st.markdown("## Global EV transition monitor")
+    st.markdown("## ⚡ EV Transition Intelligence Lab")
     st.markdown(
-        "A cross-country view of observed EV adoption, market scale and transition momentum. "
-        "All reported levels are drawn from the selected IEA historical panel."
+        "Tracking the global shift to electric vehicles across **60+ countries** — "
+        "where it's happening, how fast, and what the data says about where it's going next."
     )
-    st.caption(f"Source: IEA Global EV Outlook · Release: {dataset} · Universe: {mode} · Last observed year shown below")
+    st.caption(f"Source: IEA Global EV Outlook · Dataset: {dataset} · Mode: {mode}")
     st.markdown("---")
 
     latest = int(df["year"].max())
@@ -66,59 +66,20 @@ def render(df: pd.DataFrame):
 
     st.markdown("---")
 
-    metric_map = {
-        "EV sales share (%)": "ev_sales_share",
-        "EV stock share (%)": "ev_stock_share",
-        "Annual EV sales (units)": "ev_sales",
-        "Public charging points": "charging_points",
-    }
-    available_metrics = {label: column for label, column in metric_map.items() if column in df_l.columns and df_l[column].notna().any()}
-    if available_metrics:
-        map_col, map_note = st.columns([1, 3])
-        with map_col:
-            map_label = st.selectbox("Map metric", list(available_metrics), label_visibility="collapsed")
-        with map_note:
-            st.caption(f"Observed cross-section for {latest}. Countries without a reported value are intentionally omitted.")
-        map_metric = available_metrics[map_label]
-        map_df = df_l[["country", map_metric]].dropna()
-        if not map_df.empty:
-            fig_map = px.choropleth(
-                map_df,
-                locations="country",
-                locationmode="country names",
-                color=map_metric,
-                hover_name="country",
-                color_continuous_scale=SEQ_MAP,
-                labels={map_metric: map_label},
-            )
-            fig_map.update_geos(showframe=False, showcoastlines=True, coastlinecolor="rgba(70,88,106,0.32)", projection_type="natural earth")
-            fig_map.update_layout(**base_layout(360, f"Geographic distribution — {map_label}"), coloraxis_colorbar={"thickness": 12, "len": 0.68})
-            st.plotly_chart(fig_map, width="stretch", config=chart_config())
-            st.markdown("---")
-
     # ── Toggle: Volume vs Per Capita ─────────────────────────────────────────
     st.markdown("### Global sales trend")
-    has_population = "population" in df.columns and df["population"].notna().any()
-    views = ["Volume", "Per Capita"] if has_population else ["Volume"]
-    view_mode = st.radio(
-        "View",
-        views,
-        horizontal=True,
-        help="Per capita is available only when the selected panel contains a population series.",
-    )
+    view_mode = st.radio("View", ["Volume", "Per Capita"], horizontal=True,
+                          help="Per Capita = EVs sold per 1,000 inhabitants. Removes size advantage of large countries.")
 
-    aggregations = {"ev_sales": ("ev_sales", "sum")}
-    if has_population:
-        aggregations["population"] = ("population", "sum")
-    ts = df.groupby("year").agg(**aggregations).reset_index()
-    ts["yoy"] = ts["ev_sales"].pct_change() * 100
-    ts["per_capita"] = np.nan
-    if has_population:
-        ts["per_capita"] = np.where(
-            ts["population"] > 1e6,
-            ts["ev_sales"] / ts["population"] * 1000,
-            np.nan,
-        )
+    ts = df.groupby("year").agg(ev_sales=("ev_sales","sum"),
+                                 population=("population","sum")).reset_index()
+    ts["yoy"]        = ts["ev_sales"].pct_change() * 100
+    # Guard: population=0 for recent years where World Bank data is unavailable
+    ts["per_capita"] = np.where(
+        ts["population"] > 1e6,
+        ts["ev_sales"] / ts["population"] * 1000,
+        np.nan
+    )
 
     y_col   = "per_capita" if view_mode == "Per Capita" else "ev_sales"
     y_label = "EVs per 1,000 inhabitants" if view_mode == "Per Capita" else "Million units"
@@ -146,7 +107,7 @@ def render(df: pd.DataFrame):
         "barmode": "overlay",
     })
     fig_ts.update_layout(**lay_ts)
-    st.plotly_chart(fig_ts, width="stretch", config=chart_config())
+    st.plotly_chart(fig_ts, use_container_width=True, config=chart_config())
 
     st.markdown("---")
 
@@ -190,7 +151,7 @@ def render(df: pd.DataFrame):
             "margin": dict(l=0, r=60, t=30, b=0),
         })
         fig_hm.update_layout(**lay_hm)
-        st.plotly_chart(fig_hm, width="stretch", config=chart_config())
+        st.plotly_chart(fig_hm, use_container_width=True, config=chart_config())
         st.markdown("---")
 
     # ── Regional breakdown + Top 10 ──────────────────────────────────────────
@@ -216,10 +177,10 @@ def render(df: pd.DataFrame):
                        "yaxis": {**lay_r.get("yaxis",{}), "title": ""},
                        "showlegend": False, "margin": {**lay_r.get("margin",{}), "r": 70}})
         fig_reg.update_layout(**lay_r)
-        st.plotly_chart(fig_reg, width="stretch", config=chart_config())
+        st.plotly_chart(fig_reg, use_container_width=True, config=chart_config())
 
     with col_r:
-        st.markdown("### Top 10 fastest-growing markets")
+        st.markdown(f"### Top 10 fastest-growing markets")
         st.caption(f"YoY growth — {latest} — countries with >1,000 EV sales")
         top_gr = (
             df_l[df_l["ev_sales"] > 1000]
@@ -239,7 +200,7 @@ def render(df: pd.DataFrame):
                        "yaxis": {**lay_g.get("yaxis",{}), "title": ""},
                        "showlegend": False, "margin": {**lay_g.get("margin",{}), "r": 70}})
         fig_gr.update_layout(**lay_g)
-        st.plotly_chart(fig_gr, width="stretch", config=chart_config())
+        st.plotly_chart(fig_gr, use_container_width=True, config=chart_config())
 
     st.markdown("---")
 
@@ -276,7 +237,7 @@ def render(df: pd.DataFrame):
                         "yaxis": {**lay_ss.get("yaxis",{}), "title": ""},
                         "showlegend": False, "margin": {**lay_ss.get("margin",{}), "r": 60}})
         fig_ss.update_layout(**lay_ss)
-        st.plotly_chart(fig_ss, width="stretch", config=chart_config())
+        st.plotly_chart(fig_ss, use_container_width=True, config=chart_config())
 
     # ── EV Stock Share leaders ────────────────────────────────────────────────
     if "ev_stock_share" in df_l.columns and df_l["ev_stock_share"].notna().any():
@@ -309,7 +270,7 @@ def render(df: pd.DataFrame):
                         "yaxis": {**lay_sh.get("yaxis",{}), "title": ""},
                         "showlegend": False, "margin": {**lay_sh.get("margin",{}), "r": 60}})
         fig_sh.update_layout(**lay_sh)
-        st.plotly_chart(fig_sh, width="stretch", config=chart_config())
+        st.plotly_chart(fig_sh, use_container_width=True, config=chart_config())
 
     st.markdown("---")
 
@@ -325,7 +286,7 @@ def render(df: pd.DataFrame):
         rdf["evqti_score"] = rdf["evqti_score"].round(3)
         rdf.columns = ["Country","Rank","EVQTI Score"]
         st.dataframe(rdf.head(10).reset_index(drop=True),
-                     width="stretch", hide_index=True)
+                     use_container_width=True, hide_index=True)
         st.caption("→ Go to **EVQTI Ranking** for the full ranking, IC validation and rolling backtest.")
     except Exception as e:
         st.warning(f"Ranking unavailable: {e}")

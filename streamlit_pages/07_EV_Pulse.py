@@ -12,8 +12,10 @@ Design for resilience:
   - Rate-limit and timeout errors surfaced clearly, not swallowed silently
   - No partial UI state: if news fetch fails, the page explains why and stops cleanly
 
-Setup: configure the required service credentials only in the local deployment secrets file.
-Never commit that file or any credential value. AI summaries are optional.
+Setup — .streamlit/secrets.toml:
+    NEWSAPI_KEY = "your_key_here"
+    ANTHROPIC_API_KEY = "your_key_here"   # optional — enables AI summaries
+    (the key name remains as-is for backward compatibility, but it's used generically)
 
 Get a free NewsAPI key at: https://newsapi.org/register
 """
@@ -200,8 +202,9 @@ def render(df: pd.DataFrame = None):
     if not news_key:
         st.warning(
             "**NewsAPI key not configured.**  \n"
-            "To enable live news, configure the NewsAPI credential in local deployment secrets. "
-            "Never commit the secrets file. Get a free key (100 requests/day) at "
+            "To enable live news, add your key to `.streamlit/secrets.toml`:\n"
+            "```toml\nNEWSAPI_KEY = \"your_key_here\"\n```\n"
+            "Get a free key (100 requests/day) at "
             "[newsapi.org/register](https://newsapi.org/register)."
         )
         st.markdown("---")
@@ -248,7 +251,7 @@ def render(df: pd.DataFrame = None):
 
     if not result["ok"]:
         msg = _NEWS_ERROR_MESSAGES.get(result["error"], f"Unexpected error: {result['error']}")
-        st.error(msg)
+        st.error(f"⚠️ {msg}")
         return
 
     articles = result["articles"]
