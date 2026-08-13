@@ -15,9 +15,9 @@ def render(df: pd.DataFrame):
     st.markdown("## Regime Detection")
     st.markdown(
         "Not all EV markets are in the same phase. A **Gaussian Mixture Model** classifies each "
-        "year in a country's history into one of four adoption regimes — Emerging, Expansion, "
-        "Acceleration or Maturity. **Bayesian Changepoint Detection** identifies the exact years "
-        "when structural breaks occurred, such as policy changes, infrastructure rollouts, or supply shocks."
+        "year in a country's history into one of four ordered adoption regimes — Emerging, Expansion, "
+        "Acceleration or Maturity. A **mean-shift screening rule** highlights candidate structural breaks; "
+        "it does not establish causality or identify an economic event by itself."
     )
     st.markdown("---")
 
@@ -129,13 +129,13 @@ def render(df: pd.DataFrame):
     }), hide_index=True)
 
     st.markdown("---")
-    st.subheader("Bayesian Changepoint Detection")
+    st.subheader("Candidate Structural Breaks")
     cp     = BayesianChangePoint()
     cp_pts = cp.detect(data["ev_sales"].values)
 
     if cp_pts:
         cp_years = [int(data["year"].values[i]) for i in cp_pts if i < len(data)]
-        st.success(f"Structural breaks detected: **{', '.join(map(str, cp_years))}**")
+        st.info(f"Candidate mean shifts: **{', '.join(map(str, cp_years))}**")
         fig_cp = go.Figure(go.Scatter(
             x=data["year"].values, y=data["ev_sales"].values / 1e3,
             mode="lines+markers", line=dict(color=NAVY, width=2),
@@ -152,4 +152,4 @@ def render(df: pd.DataFrame):
         fig_cp.update_layout(**lay_cp)
         st.plotly_chart(fig_cp, config=chart_config())
     else:
-        st.info("No structural breaks detected.")
+        st.info("No candidate mean shifts detected.")

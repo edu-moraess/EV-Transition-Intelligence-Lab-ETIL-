@@ -42,21 +42,6 @@ def _run_pipeline(df_raw: pd.DataFrame) -> pd.DataFrame:
     df = DataTransformer(df).add_log_transform(["ev_sales"])
     df = FeatureEngineer(df).engineer()
 
-    # ── 3. Penetration = stock share (IEA official metric) ─────────────────────
-    if "ev_stock_share" in df.columns:
-        df["penetration"] = df["ev_stock_share"]
-
-    # ── 4. Propagate ev_sales_share from raw ──────────────────────────────────
-    if "ev_sales_share" in df_raw.columns:
-        share_raw = df_raw[["country", "year", "ev_sales_share"]].drop_duplicates()
-        attrs_backup = df.attrs.copy()
-        df = df.merge(share_raw, on=["country", "year"], how="left", suffixes=("", "_raw"))
-        if "ev_sales_share_raw" in df.columns:
-            df.drop(columns=["ev_sales_share_raw"], inplace=True, errors="ignore")
-        if df.duplicated(subset=["country", "year"]).any():
-            logger.warning("Merge of ev_sales_share introduced duplicate rows – check data.")
-        df.attrs = attrs_backup
-
     assert df.duplicated(subset=["country", "year"]).sum() == 0, "Pipeline produced duplicate country-year entries."
     return df
 

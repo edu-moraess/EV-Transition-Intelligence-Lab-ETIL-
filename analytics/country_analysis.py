@@ -30,7 +30,7 @@ class CountryAnalyzer:
         """
         Ajusta modelos de difusão e retorna parâmetros e previsões.
         """
-        t = self.df.index.values  # anos a partir de 0
+        t = np.arange(1, len(self.df) + 1, dtype=float)
         S = self.df["ev_sales"].cumsum().values
 
         results = {}

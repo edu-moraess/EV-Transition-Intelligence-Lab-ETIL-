@@ -1,237 +1,150 @@
-# models/forecasting/regime_forecast.py
-"""
-RegimeAwareForecastEngine
+"""Regime-conditioned Bass forecasts with empirical simulation intervals."""
 
-Conditions the Bass diffusion forecast on the current adoption regime,
-producing regime-specific trajectories and confidence intervals.
-
-Four regimes produce different forecast priors:
-
-  Emerging      (0): low p, low q, high uncertainty — anything is possible
-  Expansion     (1): moderate p+q, medium uncertainty — trend is establishing
-  Acceleration  (2): high q (imitation dominant), low uncertainty — trend is clear
-  Maturity      (3): low growth headroom, high certainty — saturation approaching
-
-These translate into three concrete modifications to the Bass model:
-  1. Market ceiling M: scaled by regime (Emerging = wider range, Maturity = tighter)
-  2. Growth coefficient: adjusted q by regime
-  3. Monte Carlo volatility: higher in earlier regimes, lower in later ones
-
-Anti-leakage: regime is determined from data up to year t, forecast from t+1 onward.
-"""
+from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from typing import Optional
+
 from models.diffusion.bass import BassDiffusion
 from models.regimes.hmm import HMMRegimeDetector
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# Regime-specific priors (multipliers applied to Bass fitted parameters)
 _REGIME_PRIORS = {
-    0: {"M_range": (0.7, 2.5), "q_mult": 0.8,  "volatility": 0.45, "name": "Emerging"},
-    1: {"M_range": (0.8, 1.8), "q_mult": 1.0,  "volatility": 0.30, "name": "Expansion"},
+    0: {"M_range": (0.7, 2.5), "q_mult": 0.8, "volatility": 0.45, "name": "Emerging"},
+    1: {"M_range": (0.8, 1.8), "q_mult": 1.0, "volatility": 0.30, "name": "Expansion"},
     2: {"M_range": (0.9, 1.4), "q_mult": 1.25, "volatility": 0.18, "name": "Acceleration"},
-    3: {"M_range": (0.95, 1.1),"q_mult": 0.9,  "volatility": 0.10, "name": "Maturity"},
+    3: {"M_range": (0.95, 1.1), "q_mult": 0.9, "volatility": 0.10, "name": "Maturity"},
 }
-
-_N_SIMULATIONS = 2000
-_CI_LEVELS     = [0.10, 0.20]   # 80% and 95% CI bands
 
 
 class RegimeAwareForecastEngine:
-    """
-    Produces regime-conditioned Bass diffusion forecasts.
+    """Produce heuristic regime-conditioned Bass scenarios for one country."""
 
-    Usage
-    -----
-    engine = RegimeAwareForecastEngine()
-    result = engine.forecast(country_df, horizon=10)
-
-    result keys:
-      - regime_id         current regime
-      - regime_name       human-readable name
-      - baseline          pd.DataFrame (year, median, p10, p90, p5, p95, annual_sales_*)
-      - all_regimes       dict of DataFrames, one per regime, for comparison
-      - bass_params       dict (M, p, q) fitted on historical data
-      - narrative         dict with what/why/implication strings
-    """
-
-    def __init__(self, n_simulations: int = _N_SIMULATIONS):
+    def __init__(self, n_simulations: int = 2_000, seed: int | None = 42):
+        if n_simulations < 100:
+            raise ValueError("n_simulations must be at least 100.")
         self.n_simulations = n_simulations
+        self.seed = seed
 
-    def forecast(
-        self,
-        country_df: pd.DataFrame,
-        horizon: int = 10,
-        regime_id: Optional[int] = None,
-    ) -> dict:
-        """
-        Regime-aware forecast for a single country.
-
-        Parameters
-        ----------
-        country_df : country panel, sorted by year
-        horizon    : forecast years beyond last data point
-        regime_id  : override auto-detected regime (useful for what-if analysis)
-
-        Returns
-        -------
-        dict with regime metadata, forecast DataFrames, narrative
-        """
-        if len(country_df) < 4:
-            return {"error": "Insufficient data (need at least 4 years)"}
-
+    def forecast(self, country_df: pd.DataFrame, horizon: int = 10, regime_id: int | None = None) -> dict:
+        """Return regime-specific empirical forecast distributions beyond the last observation."""
+        required = {"year", "ev_sales"}
+        missing = required - set(country_df.columns)
+        if missing:
+            return {"error": f"Missing columns: {sorted(missing)}"}
+        if len(country_df) < 4 or horizon < 1:
+            return {"error": "At least four observations and a positive horizon are required."}
         data = country_df.sort_values("year").reset_index(drop=True)
-
-        # ── Detect current regime ──────────────────────────────────────────────
+        if data["ev_sales"].isna().any() or (data["ev_sales"] < 0).any():
+            return {"error": "EV sales must be finite and non-negative."}
         if regime_id is None:
             regime_id = self._detect_regime(data)
-        regime_name = _REGIME_PRIORS.get(regime_id, {}).get("name", f"Regime {regime_id}")
+        if regime_id not in _REGIME_PRIORS:
+            return {"error": f"Unknown regime_id: {regime_id}"}
 
-        # ── Fit Bass on historical data ────────────────────────────────────────
-        t = np.arange(len(data), dtype=float)
-        S = data["ev_sales"].cumsum().values
+        t_hist = np.arange(1, len(data) + 1, dtype=float)
+        cumulative = data["ev_sales"].cumsum().to_numpy(dtype=float)
         try:
             bass = BassDiffusion()
-            M, p, q = bass.fit(t, S)
-        except Exception as e:
-            return {"error": f"Bass fit failed: {e}"}
+            M, p, q = bass.fit(t_hist, cumulative)
+        except (RuntimeError, ValueError) as error:
+            return {"error": f"Bass fit failed: {error}"}
 
         prior = _REGIME_PRIORS[regime_id]
-
-        # ── Baseline forecast (regime-adjusted) ───────────────────────────────
-        baseline = self._simulate(M, p, q, t, horizon, prior, data["year"].iloc[-1])
-
-        # ── All-regime comparison (for "what-if different regime?") ───────────
-        all_regimes = {}
-        for rid, rprior in _REGIME_PRIORS.items():
-            all_regimes[rid] = self._simulate(M, p, q, t, horizon, rprior, data["year"].iloc[-1])
-
-        # ── Narrative ─────────────────────────────────────────────────────────
-        narrative = self._build_narrative(
-            regime_id, regime_name, prior, M, p, q, baseline, data
-        )
-
+        baseline = self._simulate(M, p, q, t_hist, horizon, prior, int(data["year"].iloc[-1]))
+        all_regimes = {
+            state: self._simulate(M, p, q, t_hist, horizon, state_prior, int(data["year"].iloc[-1]))
+            for state, state_prior in _REGIME_PRIORS.items()
+        }
         return {
-            "regime_id":    regime_id,
-            "regime_name":  regime_name,
-            "baseline":     baseline,
-            "all_regimes":  all_regimes,
-            "bass_params":  {"M": M, "p": p, "q": q},
+            "regime_id": regime_id,
+            "regime_name": prior["name"],
+            "baseline": baseline,
+            "all_regimes": all_regimes,
+            "bass_params": {"M": M, "p": p, "q": q},
             "prior_applied": prior,
-            "narrative":    narrative,
+            "n_simulations": self.n_simulations,
+            "interval_type": "empirical simulation quantiles",
+            "narrative": self._build_narrative(regime_id, prior, M, p, q, baseline),
         }
 
-    # ── Internal ──────────────────────────────────────────────────────────────
-
     def _detect_regime(self, data: pd.DataFrame) -> int:
-        """Detect current regime from the last 3-5 data points."""
+        features = self._extract_regime_features(data)
+        if features is None or len(features) < 4:
+            return 0
         try:
-            features = self._extract_regime_features(data)
-            if features is None or len(features) < 2:
-                return 0  # default to Emerging
-
             detector = HMMRegimeDetector(n_states=4)
             detector.fit(features)
             states, _ = detector.predict_regime(features)
-            return int(states[-1])  # current year regime
-        except Exception as e:
-            logger.warning(f"Regime detection failed: {e}. Defaulting to Emerging.")
+            return int(states[-1])
+        except (ValueError, RuntimeError) as error:
+            logger.warning("Regime detection failed; using Emerging: %s", error)
             return 0
 
-    def _extract_regime_features(self, data: pd.DataFrame) -> Optional[np.ndarray]:
-        """Extract features for regime detection."""
-        feats = []
-        for col in ["ev_stock_share", "growth_rate"]:
-            if col in data.columns and data[col].notna().any():
-                feats.append(data[col].fillna(data[col].median()).values)
-        if len(feats) < 2:
+    @staticmethod
+    def _extract_regime_features(data: pd.DataFrame) -> np.ndarray | None:
+        columns = [column for column in ("ev_stock_share", "growth_rate") if column in data.columns]
+        if len(columns) < 2:
             return None
-        return np.column_stack(feats)
+        features = data[columns].copy()
+        if not features.notna().any().all():
+            return None
+        return features.apply(lambda series: series.fillna(series.median())).to_numpy(dtype=float)
 
     def _simulate(
         self,
-        M: float, p: float, q: float,
+        M: float,
+        p: float,
+        q: float,
         t_hist: np.ndarray,
         horizon: int,
         prior: dict,
         last_year: int,
     ) -> pd.DataFrame:
-        """
-        Monte Carlo simulation with regime-specific priors.
+        rng = np.random.default_rng(self.seed)
+        t_future = np.arange(t_hist[-1] + 1, t_hist[-1] + horizon + 1, dtype=float)
+        paths = np.empty((self.n_simulations, horizon), dtype=float)
+        q_adjusted = max(q * prior["q_mult"], 0.0)
+        low, high = prior["M_range"]
+        volatility = float(prior["volatility"])
 
-        Samples M from the regime's M_range multiplier,
-        applies q multiplier, adds stochastic noise scaled by volatility.
-        """
-        n_hist   = len(t_hist)
-        t_future = np.arange(n_hist, n_hist + horizon, dtype=float)
-        all_years = [last_year + i + 1 for i in range(horizon)]
+        for index in range(self.n_simulations):
+            market_potential = max(M * rng.uniform(low, high), 1e-8)
+            previous = BassDiffusion.cumulative_adoption(t_hist[-1], market_potential, p, q_adjusted)
+            future = BassDiffusion.cumulative_adoption(t_future, market_potential, p, q_adjusted)
+            annual = np.diff(np.concatenate(([previous], future)))
+            process_noise = np.exp(rng.normal(-0.5 * volatility**2, volatility, horizon))
+            paths[index] = np.maximum(annual * process_noise, 0.0)
 
-        paths = np.zeros((self.n_simulations, horizon))
-        rng = np.random.default_rng(42)
+        return pd.DataFrame(
+            {
+                "year": [last_year + step for step in range(1, horizon + 1)],
+                "median": np.percentile(paths, 50, axis=0),
+                "p10": np.percentile(paths, 10, axis=0),
+                "p90": np.percentile(paths, 90, axis=0),
+                "p5": np.percentile(paths, 5, axis=0),
+                "p95": np.percentile(paths, 95, axis=0),
+                "mean": np.mean(paths, axis=0),
+            }
+        )
 
-        q_adj = q * prior["q_mult"]
-        vol   = prior["volatility"]
-        M_lo, M_hi = prior["M_range"]
-
-        for i in range(self.n_simulations):
-            M_sim = M * rng.uniform(M_lo, M_hi)
-            noise = rng.normal(1.0, vol, horizon)
-            try:
-                bass_sim = BassDiffusion()
-                cum_sim  = np.array([
-                    bass_sim.cumulative_adoption(ti, M_sim, p, q_adj)
-                    for ti in t_future
-                ])
-                ann_sim  = np.maximum(np.diff(cum_sim, prepend=cum_sim[0]), 0)
-                paths[i] = ann_sim * noise
-            except Exception:
-                paths[i] = np.full(horizon, np.nan)
-
-        valid = paths[~np.isnan(paths).any(axis=1)]
-        if len(valid) == 0:
-            valid = paths
-
-        return pd.DataFrame({
-            "year":   all_years,
-            "median": np.percentile(valid, 50, axis=0),
-            "p10":    np.percentile(valid, 10, axis=0),
-            "p90":    np.percentile(valid, 90, axis=0),
-            "p5":     np.percentile(valid,  5, axis=0),
-            "p95":    np.percentile(valid, 95, axis=0),
-            "mean":   np.mean(valid, axis=0),
-        })
-
-    def _build_narrative(
-        self,
-        regime_id: int, regime_name: str, prior: dict,
-        M: float, p: float, q: float,
-        baseline: pd.DataFrame,
-        data: pd.DataFrame,
-    ) -> dict:
-        """Build structured narrative for the forecast."""
-        vol_desc = {0: "high", 1: "moderate", 2: "low", 3: "very low"}[regime_id]
-        peak_year = int(baseline.loc[baseline["median"].idxmax(), "year"])
-        peak_val  = baseline["median"].max()
+    @staticmethod
+    def _build_narrative(regime_id: int, prior: dict, M: float, p: float, q: float, baseline: pd.DataFrame) -> dict:
+        regime_name = prior["name"]
+        peak_row = baseline.loc[baseline["median"].idxmax()]
         spread_80 = float((baseline["p90"] - baseline["p10"]).mean())
-
-        what = (
-            f"{regime_name} regime detected. "
-            f"Bass parameters: M={M:,.0f}, p={p:.4f}, q={q:.4f}."
-        )
-        why = (
-            f"In the {regime_name} phase, imitation coefficient is adjusted by "
-            f"{(prior['q_mult']-1)*100:+.0f}% and forecast uncertainty is {vol_desc}. "
-            f"Market ceiling scaled to [{prior['M_range'][0]:.0%}–{prior['M_range'][1]:.0%}] of fitted M."
-        )
-        implication = (
-            f"Peak annual sales projected around {peak_year} "
-            f"(median {peak_val/1e3:.0f}k units). "
-            f"80% CI spread averages {spread_80/1e3:.0f}k units/year — "
-            f"{'high uncertainty, wide range of outcomes' if spread_80 > 50000 else 'relatively contained uncertainty'}."
-        )
-
-        return {"what": what, "why": why, "implication": implication}
+        return {
+            "what": f"{regime_name} regime scenario. Bass parameters: M={M:,.0f}, p={p:.4f}, q={q:.4f}.",
+            "why": (
+                f"The scenario applies q × {prior['q_mult']:.2f}, samples M between "
+                f"{prior['M_range'][0]:.0%} and {prior['M_range'][1]:.0%} of the fitted value, "
+                "and uses lognormal process noise."
+            ),
+            "implication": (
+                f"Median annual sales peak near {int(peak_row['year'])} at {peak_row['median']:,.0f} units. "
+                f"The mean P10–P90 spread is {spread_80:,.0f} units per year."
+            ),
+            "limitation": "Intervals are empirical scenario quantiles, not confidence or credible intervals.",
+        }

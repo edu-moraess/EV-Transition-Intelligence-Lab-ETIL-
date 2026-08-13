@@ -1,242 +1,99 @@
-# ingestion/aggregator.py
-"""
-Aggregator — correct dimensional aggregation of IEA GEVO datasets.
+"""Dimensionally safe aggregation for IEA Global EV Outlook datasets."""
 
-KEY RULE — double-counting prevention:
-  IEA 2026 provides EV sales at two levels:
-    1. powertrain='EV'            → aggregate (BEV + PHEV + FCEV + EREV)
-    2. powertrain='BEV'/'PHEV'... → individual components
+from __future__ import annotations
 
-  NEVER mix these two levels in a sum. Always use one or the other.
-
-  Correct:  EV_total = sum(EV) across modes          (uses aggregate)
-  Correct:  EV_total = sum(BEV+PHEV+FCEV) per mode   (uses components)
-  WRONG:    EV_total = sum(EV + BEV + PHEV)           (double-counts)
-
-  IEA 2025 has NO 'EV' aggregate in EV sales → must use BEV+PHEV+FCEV.
-
-Primary key: country × category × year × parameter × mode × powertrain
-
-Aggregation dimensions:
-  - mode    : Cars / Buses / Trucks / Vans / 2 and 3 wheelers / Total
-  - category: Historical / Projection-CPS / Projection-STEPS
-"""
+from typing import Literal
 
 import pandas as pd
-import numpy as np
-from typing import Literal
+
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# Modes that represent actual vehicle sales (exclude infrastructure modes)
-_VEHICLE_MODES = {
-    "Cars", "Buses", "Trucks", "Vans", "2 and 3 wheelers"
-}
-
-# Modes that are price segments (only in 2026 battery price data — never aggregate)
+_VEHICLE_MODES = {"Cars", "Buses", "Trucks", "Vans", "2 and 3 wheelers"}
 _PRICE_MODES = {
-    "All cars", "City car", "Large car", "Medium car",
-    "Large SUV/Pick-up", "Small SUV/Pick-up"
+    "All cars",
+    "City car",
+    "Large car",
+    "Medium car",
+    "Large SUV/Pick-up",
+    "Small SUV/Pick-up",
 }
-
-# mode='EV' in IEA data is infrastructure-only (chargers, capacity) — not vehicle sales
 _INFRA_MODES = {"EV", "EVSE"}
-
-# EV aggregate powertrain (2026)
 _EV_AGGREGATE = "EV"
-
-# EV component powertrains (used when aggregate unavailable — e.g. IEA 2025)
 _EV_COMPONENTS = {"BEV", "PHEV", "FCEV", "EREV"}
 
 
 class Aggregator:
-    """
-    Aggregates IEA GEVO data correctly across dimensions.
-
-    Usage
-    -----
-    agg = Aggregator(df_raw, schema="2026")  # or "2025"
-    ev_sales = agg.ev_sales(category="Historical", mode="Cars")
-    total_ev = agg.total_ev_all_modes(category="Historical")
-    panel    = agg.build_panel(category="Historical")
-    """
+    """Aggregate IEA records while preserving their dimensional meaning."""
 
     def __init__(self, df: pd.DataFrame, schema: Literal["2025", "2026"]):
-        self.df     = df.copy()
+        required = {"region_country", "category", "year", "parameter", "mode", "powertrain", "value"}
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(f"Missing required columns for aggregation: {sorted(missing)}")
+        self.df = df.copy()
         self.schema = schema
-        self._use_aggregate = schema == "2026"  # 2026 has EV aggregate; 2025 does not
-        logger.info(f"Aggregator init | schema={schema} | use_EV_aggregate={self._use_aggregate}")
+        self._use_aggregate = schema == "2026"
 
-    # ── Public API ────────────────────────────────────────────────────────
+    def ev_sales(self, category: str = "Historical", mode: str = "Cars") -> pd.DataFrame:
+        """Return EV sales for one vehicle mode."""
+        return self._aggregate_vehicle_metric("EV sales", "ev_sales", category, mode)
 
-    def ev_sales(
-        self,
-        category: str = "Historical",
-        mode: str = "Cars",
-    ) -> pd.DataFrame:
-        """
-        EV sales for a specific mode, correctly avoiding double-counting.
-
-        Returns
-        -------
-        pd.DataFrame
-            Columns: country, category, year, mode, ev_sales
-        """
-        df = self._filter_base("EV sales", category)
-        df = df[df["mode"] == mode]
-        df = self._select_ev_powertrain(df)
-
-        result = (
-            df.groupby(["region_country", "category", "year", "mode"])["value"]
-            .sum()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "ev_sales"})
-        )
-        return result
+    def ev_stock(self, category: str = "Historical", mode: str = "Cars") -> pd.DataFrame:
+        """Return EV stock for one vehicle mode."""
+        return self._aggregate_vehicle_metric("EV stock", "ev_stock", category, mode)
 
     def total_ev_all_modes(
         self,
         category: str = "Historical",
-        modes: set | None = None,
+        modes: set[str] | None = None,
     ) -> pd.DataFrame:
-        """
-        Total EV sales across all vehicle modes (Cars + Buses + Trucks + Vans + 2&3w).
+        """Return EV sales summed over vehicle modes without double counting."""
+        return self._aggregate_all_vehicle_modes("EV sales", "ev_sales_total", category, modes)
 
-        This is the correct formula:
-            Total EV = Σ EV(mode) for mode in vehicle_modes
-            using powertrain='EV' (aggregate) where available,
-            or BEV+PHEV+FCEV (components) otherwise.
-
-        Parameters
-        ----------
-        modes : set, optional
-            Subset of vehicle modes to include. Default: all vehicle modes.
-        """
-        vehicle_modes = modes or _VEHICLE_MODES
-        df = self._filter_base("EV sales", category)
-        df = df[df["mode"].isin(vehicle_modes)]
-        df = self._select_ev_powertrain(df)
-
-        result = (
-            df.groupby(["region_country", "category", "year"])["value"]
-            .sum()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "ev_sales_total"})
-        )
-        return result
-
-    def ev_stock(
+    def total_ev_stock_all_modes(
         self,
         category: str = "Historical",
-        mode: str = "Cars",
+        modes: set[str] | None = None,
     ) -> pd.DataFrame:
-        """EV stock for a specific mode."""
-        df = self._filter_base("EV stock", category)
-        df = df[df["mode"] == mode]
-        df = self._select_ev_powertrain(df)
+        """Return EV stock summed over vehicle modes without double counting."""
+        return self._aggregate_all_vehicle_modes("EV stock", "ev_stock_total", category, modes)
 
-        return (
-            df.groupby(["region_country", "category", "year", "mode"])["value"]
-            .sum()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "ev_stock"})
-        )
+    def ev_sales_share(self, category: str = "Historical", mode: str = "Cars") -> pd.DataFrame:
+        """Return the official EV sales share in percent for one vehicle mode."""
+        return self._aggregate_share("EV sales share", "ev_sales_share", category, mode)
 
-    def ev_sales_share(
-        self,
-        category: str = "Historical",
-        mode: str = "Cars",
-    ) -> pd.DataFrame:
-        """EV sales share (%) — uses powertrain='EV' in both schemas."""
-        df = self._filter_base("EV sales share", category)
-        df = df[(df["mode"] == mode) & (df["powertrain"] == "EV")]
+    def ev_stock_share(self, category: str = "Historical", mode: str = "Cars") -> pd.DataFrame:
+        """Return the official EV stock share in percent for one vehicle mode."""
+        return self._aggregate_share("EV stock share", "ev_stock_share", category, mode)
 
-        return (
-            df.groupby(["region_country", "category", "year", "mode"])["value"]
-            .mean()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "ev_sales_share"})
-        )
-
-    def ev_stock_share(
-        self,
-        category: str = "Historical",
-        mode: str = "Cars",
-    ) -> pd.DataFrame:
-        """EV stock share (%) — uses powertrain='EV' in both schemas."""
-        df = self._filter_base("EV stock share", category)
-        df = df[(df["mode"] == mode) & (df["powertrain"] == "EV")]
-
-        return (
-            df.groupby(["region_country", "category", "year", "mode"])["value"]
-            .mean()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "ev_stock_share"})
-        )
-
-    def charging_points(
-        self,
-        category: str = "Historical",
-    ) -> pd.DataFrame:
-        """
-        Total EV charging points (all types summed: fast + slow + ultra-fast).
-        mode='EVSE' is the correct infrastructure label in IEA data.
-        """
+    def charging_points(self, category: str = "Historical") -> pd.DataFrame:
+        """Return public charging points across the IEA 2025 and 2026 schemas."""
         df = self.df[
-            (self.df["parameter"] == "EV charging points") &
-            (self.df["category"] == category) &
-            (self.df["mode"] == "EVSE")   # EVSE = Electric Vehicle Supply Equipment
-        ].copy()
+            (self.df["parameter"] == "EV charging points")
+            & (self.df["category"] == category)
+            & (self.df["mode"].isin(_INFRA_MODES))
+        ]
+        return self._sum(df, ["region_country", "category", "year"], "charging_points")
 
-        return (
-            df.groupby(["region_country", "category", "year"])["value"]
-            .sum()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "charging_points"})
-        )
-
-    def charging_by_type(
-        self,
-        category: str = "Historical",
-    ) -> pd.DataFrame:
-        """
-        Charging points broken down by type: fast / slow / ultra-fast.
-        Useful for infrastructure quality analysis.
-        """
+    def charging_by_type(self, category: str = "Historical") -> pd.DataFrame:
+        """Return charging points by charger type."""
         df = self.df[
-            (self.df["parameter"] == "EV charging points") &
-            (self.df["category"] == category) &
-            (self.df["mode"] == "EVSE")
-        ].copy()
+            (self.df["parameter"] == "EV charging points")
+            & (self.df["category"] == category)
+            & (self.df["mode"].isin(_INFRA_MODES))
+        ]
+        result = self._sum(df, ["region_country", "category", "year", "powertrain"], "charging_points")
+        return result.rename(columns={"powertrain": "charger_type"})
 
-        return (
-            df.groupby(["region_country", "category", "year", "powertrain"])["value"]
-            .sum()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "charging_points",
-                              "powertrain": "charger_type"})
-        )
-
-    def ev_per_charger(
-        self,
-        category: str = "Historical",
-    ) -> pd.DataFrame:
-        """
-        Electric LDVs per charging point — IEA pre-computed ratio.
-        Lower = better infrastructure coverage relative to EV fleet size.
-        """
+    def ev_per_charger(self, category: str = "Historical") -> pd.DataFrame:
+        """Return the IEA-provided electric LDV-per-charger ratio."""
         df = self.df[
-            (self.df["parameter"] == "Electric LDVs per charging point") &
-            (self.df["category"] == category)
-        ].copy()
-
-        return (
-            df.groupby(["region_country", "category", "year"])["value"]
-            .mean()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "ev_per_charger"})
-        )
+            (self.df["parameter"] == "Electric LDVs per charging point")
+            & (self.df["category"] == category)
+        ]
+        return self._mean(df, ["region_country", "category", "year"], "ev_per_charger")
 
     def breakdown_by_powertrain(
         self,
@@ -244,105 +101,85 @@ class Aggregator:
         category: str = "Historical",
         mode: str = "Cars",
     ) -> pd.DataFrame:
-        """
-        EV sales broken down by powertrain (BEV / PHEV / FCEV / EREV).
-        Uses components directly — never the 'EV' aggregate — to avoid ambiguity.
-        """
+        """Return component-level EV values without the aggregate EV record."""
         df = self._filter_base(parameter, category)
         df = df[(df["mode"] == mode) & (df["powertrain"].isin(_EV_COMPONENTS))]
-
-        return (
-            df.groupby(["region_country", "category", "year", "mode", "powertrain"])["value"]
-            .sum()
-            .reset_index()
-            .rename(columns={"region_country": "country", "value": "value"})
+        result = self._sum(
+            df,
+            ["region_country", "category", "year", "mode", "powertrain"],
+            "value",
         )
+        return result
 
-    def build_panel(
-        self,
-        category: str = "Historical",
-        mode: str = "Cars",
-    ) -> pd.DataFrame:
-        """
-        Build a wide panel with all key metrics for a given category and mode.
-        This is the main method consumed by the ETIL pipeline.
-
-        Returns
-        -------
-        pd.DataFrame
-            Columns: country, category, year, mode,
-                     ev_sales, ev_stock, ev_sales_share, ev_stock_share,
-                     charging_points, data_source
-        """
-        sales       = self.ev_sales(category, mode)
-        stock       = self.ev_stock(category, mode)
+    def build_panel(self, category: str = "Historical", mode: str = "Cars") -> pd.DataFrame:
+        """Build the canonical country-year panel for a single vehicle mode."""
+        sales = self.ev_sales(category, mode)
+        stock = self.ev_stock(category, mode)
         sales_share = self.ev_sales_share(category, mode)
         stock_share = self.ev_stock_share(category, mode)
-        charging    = self.charging_points(category)
-
-        panel = sales.merge(
-            stock[["country","year","ev_stock"]], on=["country","year"], how="left"
-        ).merge(
-            sales_share[["country","year","ev_sales_share"]], on=["country","year"], how="left"
-        ).merge(
-            stock_share[["country","year","ev_stock_share"]], on=["country","year"], how="left"
-        ).merge(
-            charging[["country","year","charging_points"]], on=["country","year"], how="left"
+        charging = self.charging_points(category)
+        panel = (
+            sales.merge(stock[["country", "year", "ev_stock"]], on=["country", "year"], how="left")
+            .merge(sales_share[["country", "year", "ev_sales_share"]], on=["country", "year"], how="left")
+            .merge(stock_share[["country", "year", "ev_stock_share"]], on=["country", "year"], how="left")
+            .merge(charging[["country", "year", "charging_points"]], on=["country", "year"], how="left")
         )
-
         panel["data_source"] = self.schema
-        panel["year"]        = panel["year"].astype(int)
-        panel["ev_sales"]    = pd.to_numeric(panel["ev_sales"], errors="coerce")
-        panel = panel[panel["ev_sales"] > 0].reset_index(drop=True)
-
-        logger.info(
-            f"Panel built | category={category} mode={mode} | "
-            f"{panel['country'].nunique()} countries | {panel.shape[0]} rows"
-        )
+        panel["year"] = pd.to_numeric(panel["year"], errors="raise").astype(int)
+        panel["ev_sales"] = pd.to_numeric(panel["ev_sales"], errors="coerce")
+        panel = panel.loc[panel["ev_sales"] > 0].drop_duplicates(["country", "year"]).reset_index(drop=True)
         return panel
 
-    def available_projections(self) -> list:
-        """List available projection scenarios in this dataset."""
-        return sorted(
-            c for c in self.df["category"].unique()
-            if c.startswith("Projection")
-        )
+    def available_projections(self) -> list[str]:
+        """Return available IEA projection scenario names."""
+        return sorted(category for category in self.df["category"].dropna().unique() if category.startswith("Projection"))
 
-    # ── Internal helpers ──────────────────────────────────────────────────
+    def _aggregate_vehicle_metric(self, parameter: str, value_name: str, category: str, mode: str) -> pd.DataFrame:
+        df = self._filter_base(parameter, category)
+        df = self._select_ev_powertrain(df[df["mode"] == mode])
+        return self._sum(df, ["region_country", "category", "year", "mode"], value_name)
+
+    def _aggregate_all_vehicle_modes(
+        self,
+        parameter: str,
+        value_name: str,
+        category: str,
+        modes: set[str] | None,
+    ) -> pd.DataFrame:
+        df = self._filter_base(parameter, category)
+        df = self._select_ev_powertrain(df[df["mode"].isin(modes or _VEHICLE_MODES)])
+        return self._sum(df, ["region_country", "category", "year"], value_name)
+
+    def _aggregate_share(self, parameter: str, value_name: str, category: str, mode: str) -> pd.DataFrame:
+        df = self._filter_base(parameter, category)
+        df = df[(df["mode"] == mode) & (df["powertrain"] == _EV_AGGREGATE)]
+        return self._mean(df, ["region_country", "category", "year", "mode"], value_name)
 
     def _filter_base(self, parameter: str, category: str) -> pd.DataFrame:
-        """Filter by parameter and category, exclude price and infra modes."""
-        df = self.df[
-            (self.df["parameter"] == parameter) &
-            (self.df["category"] == category)
-        ].copy()
-        # Remove price-segment modes (battery price data, not sales)
-        df = df[~df["mode"].isin(_PRICE_MODES)]
-        return df
+        df = self.df[(self.df["parameter"] == parameter) & (self.df["category"] == category)].copy()
+        return df.loc[~df["mode"].isin(_PRICE_MODES)]
 
     def _select_ev_powertrain(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Select the correct powertrain level to avoid double-counting.
+        if not self._use_aggregate:
+            return df.loc[df["powertrain"].isin(_EV_COMPONENTS)].copy()
+        key_columns = ["region_country", "category", "year", "mode"]
+        aggregate = df.loc[df["powertrain"] == _EV_AGGREGATE].copy()
+        components = df.loc[df["powertrain"].isin(_EV_COMPONENTS)].copy()
+        if aggregate.empty:
+            return components
+        if components.empty:
+            return aggregate
+        aggregate_keys = pd.MultiIndex.from_frame(aggregate[key_columns])
+        component_keys = pd.MultiIndex.from_frame(components[key_columns])
+        fallback = components.loc[~component_keys.isin(aggregate_keys)]
+        return pd.concat([aggregate, fallback], ignore_index=True)
 
-        IEA 2026: prefer powertrain='EV' (aggregate already computed by IEA).
-                  If 'EV' not present for a given row, fall back to components.
-        IEA 2025: 'EV' is absent from EV sales → use BEV+PHEV+FCEV.
-        """
-        if self._use_aggregate:
-            # Use EV aggregate where available
-            has_ev  = df[df["powertrain"] == _EV_AGGREGATE]
-            # For rows where EV aggregate is absent, use components
-            no_ev_keys = set(
-                zip(df["region_country"], df["year"], df.get("mode", ""))
-            ) - set(zip(has_ev["region_country"], has_ev["year"], has_ev.get("mode", "")))
-            if no_ev_keys:
-                fallback = df[
-                    df["powertrain"].isin(_EV_COMPONENTS) &
-                    list(zip(df["region_country"], df["year"], df.get("mode",""))).apply(
-                        lambda k: k in no_ev_keys
-                    )
-                ] if False else pd.DataFrame()  # simplified: aggregate covers all 2026
-            return has_ev
-        else:
-            # 2025: sum BEV + PHEV + FCEV (no EV aggregate in EV sales)
-            return df[df["powertrain"].isin(_EV_COMPONENTS)]
+    @staticmethod
+    def _sum(df: pd.DataFrame, keys: list[str], value_name: str) -> pd.DataFrame:
+        result = df.groupby(keys, dropna=False)["value"].sum(min_count=1).reset_index()
+        return result.rename(columns={"region_country": "country", "value": value_name})
+
+    @staticmethod
+    def _mean(df: pd.DataFrame, keys: list[str], value_name: str) -> pd.DataFrame:
+        result = df.groupby(keys, dropna=False)["value"].mean().reset_index()
+        return result.rename(columns={"region_country": "country", "value": value_name})

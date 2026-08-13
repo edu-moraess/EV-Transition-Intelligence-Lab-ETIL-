@@ -1,29 +1,26 @@
-# preprocessing/features.py
-"""
-Engenharia de features quantitativas.
-"""
-import pandas as pd
+"""Feature engineering for chronologically ordered EV country panels."""
+
+from __future__ import annotations
+
 import numpy as np
-from utils.helpers import growth_rate, cagr, rolling_momentum
+import pandas as pd
+
+from utils.helpers import rolling_momentum
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+
 class FeatureEngineer:
-    """
-    Cria features derivadas para análise de transição.
-    """
+    """Create descriptive features without using future observations."""
 
     def __init__(self, df: pd.DataFrame):
         self.df = df.copy()
 
     def engineer(self) -> pd.DataFrame:
-        """
-        Executa todas as etapas de criação de features.
-
-        Returns:
-            pd.DataFrame: DataFrame com novas colunas.
-        """
+        """Return a country-year panel with causal feature construction."""
+        self._validate_input()
+        self.df = self.df.sort_values(["country", "year"]).reset_index(drop=True)
         self._add_penetration()
         self._add_growth_rates()
         self._add_cagr()
@@ -33,45 +30,67 @@ class FeatureEngineer:
         self._add_ev_per_capita()
         return self.df
 
+    def _validate_input(self) -> None:
+        required = {"country", "year", "ev_sales"}
+        missing = required - set(self.df.columns)
+        if missing:
+            raise ValueError(f"Missing required feature columns: {sorted(missing)}")
+        if self.df.duplicated(["country", "year"]).any():
+            raise ValueError("Feature engineering requires unique country-year rows.")
+
     def _add_penetration(self) -> None:
-        """Calcula a penetração de EV: ev_sales / total_sales * 100."""
-        if "total_sales" in self.df.columns and self.df["total_sales"].notna().any():
-            self.df["penetration"] = (self.df["ev_sales"] / self.df["total_sales"]) * 100
-            self.df["penetration"] = self.df["penetration"].fillna(0)
+        if "ev_stock_share" in self.df.columns and self.df["ev_stock_share"].notna().any():
+            self.df["penetration"] = self.df["ev_stock_share"]
+        elif "total_sales" in self.df.columns and self.df["total_sales"].notna().any():
+            total_sales = self.df["total_sales"].replace(0, np.nan)
+            self.df["penetration"] = self.df["ev_sales"] / total_sales * 100
         else:
-            logger.warning("total_sales não disponível, penetração não calculada.")
+            self.df["penetration"] = np.nan
 
     def _add_growth_rates(self) -> None:
-        """Adiciona taxa de crescimento anual de ev_sales."""
-        self.df["growth_rate"] = self.df.groupby("country")["ev_sales"].transform(growth_rate)
+        self.df["growth_rate"] = self.df.groupby("country", group_keys=False)["ev_sales"].apply(
+            lambda series: series.pct_change(fill_method=None).mul(100).replace([np.inf, -np.inf], np.nan)
+        )
 
     def _add_cagr(self) -> None:
-        """Adiciona CAGR para cada país (constante ao longo dos anos)."""
-        cagr_vals = self.df.groupby("country")["ev_sales"].agg(cagr)
-        self.df["cagr"] = self.df["country"].map(cagr_vals)
+        result = pd.Series(np.nan, index=self.df.index, dtype=float)
+        for _, group in self.df.groupby("country", sort=False):
+            sales = pd.to_numeric(group["ev_sales"], errors="coerce")
+            valid = sales.gt(0) & group["year"].notna()
+            if valid.sum() < 2:
+                continue
+            first_index = valid[valid].index[0]
+            initial_sales = sales.loc[first_index]
+            initial_year = self.df.loc[first_index, "year"]
+            elapsed = self.df.loc[group.index, "year"] - initial_year
+            current_sales = sales.loc[group.index]
+            valid_elapsed = elapsed.gt(0) & current_sales.gt(0)
+            result.loc[group.index[valid_elapsed]] = (
+                (current_sales.loc[valid_elapsed] / initial_sales) ** (1 / elapsed.loc[valid_elapsed]) - 1
+            ) * 100
+        self.df["cagr"] = result
 
     def _add_momentum(self) -> None:
-        """Adiciona momentum (3 anos)."""
-        self.df["momentum_3y"] = self.df.groupby("country")["ev_sales"].transform(
-            lambda x: rolling_momentum(x, window=3)
+        self.df["momentum_3y"] = self.df.groupby("country", group_keys=False)["ev_sales"].apply(
+            lambda series: rolling_momentum(series, window=3)
         )
 
     def _add_volatility(self) -> None:
-        """Adiciona volatilidade (desvio padrão do crescimento)."""
-        self.df["volatility"] = self.df.groupby("country")["growth_rate"].transform(
-            lambda x: x.rolling(4, min_periods=2).std()
+        self.df["volatility"] = self.df.groupby("country", group_keys=False)["growth_rate"].apply(
+            lambda series: series.rolling(4, min_periods=2).std()
         )
 
     def _add_infrastructure_pressure(self) -> None:
-        """Calcula EV por ponto de carga (se disponível)."""
-        if "charging_points" in self.df.columns and self.df["charging_points"].notna().any():
-            self.df["ev_per_charger"] = self.df["ev_sales"] / (self.df["charging_points"] + 1)
+        if {"ev_stock", "charging_points"}.issubset(self.df.columns):
+            chargers = self.df["charging_points"].replace(0, np.nan)
+            self.df["ev_per_charger"] = self.df["ev_stock"] / chargers
         else:
             self.df["ev_per_charger"] = np.nan
 
     def _add_ev_per_capita(self) -> None:
-        """Calcula EV per capita (se população disponível)."""
+        numerator = "ev_stock" if "ev_stock" in self.df.columns else "ev_sales"
         if "population" in self.df.columns and self.df["population"].notna().any():
-            self.df["ev_per_capita"] = self.df["ev_sales"] / (self.df["population"] + 1)
+            population = self.df["population"].replace(0, np.nan)
+            self.df["ev_per_capita"] = self.df[numerator] / population
         else:
-            self.df["ev_per_capita"] = np.nan 
+            self.df["ev_per_capita"] = np.nan

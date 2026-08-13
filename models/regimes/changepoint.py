@@ -1,86 +1,62 @@
-# models/regimes/changepoint.py
-"""
-Detecção de mudanças de regime via Bayesian Change Point.
-Simplificação: usa a biblioteca `ruptures`? Mas manteremos puramente scipy/numpy.
-Implementaremos um método simplificado baseado em soma cumulativa (CUSUM) com abordagem Bayesiana.
-"""
+"""Heuristic mean-shift screening for a univariate time series."""
+
+from __future__ import annotations
+
 import numpy as np
-import pandas as pd
-from typing import List, Tuple, Optional
+
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+
 class BayesianChangePoint:
-    """
-    Detecta pontos de mudança em uma série temporal usando uma abordagem Bayesiana simplificada.
-    Aqui, calculamos a probabilidade de mudança em cada ponto usando uma métrica de verossimilhança.
-    """
+    """Compatibility wrapper for a non-Bayesian standardized mean-shift detector."""
 
-    def __init__(self, min_distance: int = 2):
+    def __init__(self, min_distance: int = 2, percentile: float = 95.0):
+        if min_distance < 1:
+            raise ValueError("min_distance must be positive.")
+        if not 0 < percentile < 100:
+            raise ValueError("percentile must be between zero and 100.")
         self.min_distance = min_distance
-        self.changepoints = []
+        self.percentile = percentile
+        self.changepoints: list[int] = []
+        self.scores_: np.ndarray | None = None
 
-    def detect(self, series: np.ndarray) -> List[int]:
-        """
-        Detecta pontos de mudança baseados em mudanças de média/variancia.
-
-        Args:
-            series (np.ndarray): Série temporal unidimensional.
-
-        Returns:
-            List[int]: Índices dos pontos de mudança.
-        """
-        n = len(series)
-        if n < 3:
+    def detect(self, series: np.ndarray) -> list[int]:
+        """Identify locally maximal standardized mean-shift scores above a percentile threshold."""
+        scores = self.get_scores(series)
+        valid = scores > 0
+        if not valid.any():
+            self.changepoints = []
             return []
+        threshold = float(np.percentile(scores[valid], self.percentile))
+        points = []
+        for index in range(self.min_distance, len(scores) - self.min_distance):
+            local = scores[max(0, index - self.min_distance) : min(len(scores), index + self.min_distance + 1)]
+            if scores[index] >= threshold and scores[index] == np.max(local):
+                points.append(index)
+        self.changepoints = points
+        return points
 
-        # Usa uma abordagem de janela: calcula a diferença entre médias antes/depois
-        scores = np.zeros(n)
-        for i in range(self.min_distance, n - self.min_distance):
-            left = series[:i]
-            right = series[i:]
-            mean_left = np.mean(left)
-            mean_right = np.mean(right)
-            var_left = np.var(left)
-            var_right = np.var(right)
-            # Score baseado na diferença de médias normalizada (efetivamente t-stat)
-            if var_left + var_right > 0:
-                score = (mean_left - mean_right) ** 2 / (var_left + var_right)
-            else:
-                score = 0
-            scores[i] = score
-
-        # Pega os picos acima de um limiar (adaptativo)
-        threshold = np.percentile(scores, 95) if np.any(scores) else 0
-        changepoints = []
-        for i in range(self.min_distance, n - self.min_distance):
-            if scores[i] > threshold and scores[i] == max(scores[max(0,i-2):min(n,i+3)]):
-                changepoints.append(i)
-
-        self.changepoints = changepoints
-        logger.info(f"Changepoints detectados: {changepoints}")
-        return changepoints
+    def get_scores(self, series: np.ndarray) -> np.ndarray:
+        """Return non-negative standardized mean-shift scores; these are not posterior probabilities."""
+        values = np.asarray(series, dtype=float).reshape(-1)
+        if not np.all(np.isfinite(values)):
+            raise ValueError("Change-point input must be finite.")
+        scores = np.zeros(len(values), dtype=float)
+        if len(values) < 2 * self.min_distance + 1:
+            self.scores_ = scores
+            return scores
+        for index in range(self.min_distance, len(values) - self.min_distance):
+            left, right = values[:index], values[index:]
+            pooled_variance = left.var(ddof=1) / len(left) + right.var(ddof=1) / len(right)
+            if np.isfinite(pooled_variance) and pooled_variance > 0:
+                scores[index] = (left.mean() - right.mean()) ** 2 / pooled_variance
+        self.scores_ = scores
+        return scores
 
     def get_probabilities(self, series: np.ndarray) -> np.ndarray:
-        """
-        Retorna uma probabilidade aproximada de mudança em cada ponto (normalizada).
-        """
-        n = len(series)
-        probs = np.zeros(n)
-        if n < 3:
-            return probs
-        for i in range(self.min_distance, n - self.min_distance):
-            left = series[:i]
-            right = series[i:]
-            mean_left = np.mean(left)
-            mean_right = np.mean(right)
-            var_left = np.var(left) + 1e-6
-            var_right = np.var(right) + 1e-6
-            # Log-verossimilhança aproximada
-            ll = -0.5 * (np.log(var_left) + np.log(var_right) + (mean_left - mean_right)**2/(var_left+var_right))
-            probs[i] = np.exp(ll)  # não normalizado
-        # Normaliza
-        if np.sum(probs) > 0:
-            probs = probs / np.sum(probs)
-        return probs
+        """Return normalized change scores retained for backward compatibility."""
+        scores = self.get_scores(series)
+        total = scores.sum()
+        return scores / total if total > 0 else scores

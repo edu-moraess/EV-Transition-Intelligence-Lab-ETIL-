@@ -100,7 +100,7 @@ class FactorEngine:
             logger.error("FactorEngine: empty panel after build.")
             return self
 
-        self._calibrated_weights = self._calibrate_weights(panel)
+        self._calibrated_weights = self.weights or self._calibrate_weights(panel)
         self.scores_  = self._score_panel(panel)
         self.panel_   = panel
         self.fitted   = True
@@ -202,10 +202,10 @@ class FactorEngine:
         Uses penetration factors only, same as EVQTI v3.
         """
         self._check_fitted()
-        scores = self.scores_.copy()
-        scores = scores.rename(columns={"composite_score": "evqti_score"})
-        scores["rank"] = scores["evqti_score"].rank(ascending=False).astype(int)
-        return scores[["country","rank","evqti_score"]].sort_values("rank")
+        scores = self.scores_[["country", "evqti_compat_score"]].copy()
+        scores = scores.rename(columns={"evqti_compat_score": "evqti_score"})
+        scores["rank"] = scores["evqti_score"].rank(ascending=False, method="min").astype(int)
+        return scores[["country", "rank", "evqti_score"]].sort_values(["rank", "country"])
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

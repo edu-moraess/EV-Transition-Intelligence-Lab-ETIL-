@@ -330,9 +330,9 @@ def render(df: pd.DataFrame):
         "The best-fitting model (lowest AIC) is highlighted."
     )
 
-    t = np.arange(len(data), dtype=float)
+    t = np.arange(1, len(data) + 1, dtype=float)
     S = data["ev_sales"].cumsum().values
-    t_x = np.arange(0, len(t) + 8, dtype=float)
+    t_x = np.arange(1, len(t) + 9, dtype=float)
     y_x = np.arange(int(data["year"].min()), int(data["year"].min()) + len(t_x))
 
     fitted = {}; diag = {}

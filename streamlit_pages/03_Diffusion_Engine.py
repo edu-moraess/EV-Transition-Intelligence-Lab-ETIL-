@@ -31,11 +31,11 @@ def render(df: pd.DataFrame):
     if len(data) < 4:
         st.warning("Insufficient data (minimum 4 years required)."); return
 
-    t       = np.arange(len(data), dtype=float)
+    t       = np.arange(1, len(data) + 1, dtype=float)
     S       = data["ev_sales"].cumsum().values
     y_ann   = data["ev_sales"].values
     horizon = st.slider("Projection horizon (years beyond last data point)", 2, 20, 8)
-    t_all   = np.arange(len(data) + horizon, dtype=float)
+    t_all   = np.arange(1, len(data) + horizon + 1, dtype=float)
     yrs_all = np.arange(int(data["year"].min()),
                          int(data["year"].min()) + len(t_all))
 
@@ -130,7 +130,7 @@ def render(df: pd.DataFrame):
     # ── Projection table ──────────────────────────────────────────────────
     if fitted:
         st.markdown("#### Projections (future years)")
-        future_t   = np.arange(len(data), len(data) + horizon, dtype=float)
+        future_t   = np.arange(len(data) + 1, len(data) + horizon + 1, dtype=float)
         future_yrs = np.arange(int(data["year"].max()) + 1,
                                 int(data["year"].max()) + 1 + horizon)
         rows = []
@@ -166,7 +166,7 @@ def render(df: pd.DataFrame):
         for ci, ctry in enumerate(all_compare):
             d_c = df[df["country"] == ctry].sort_values("year")
             if len(d_c) < 4: continue
-            t_c = np.arange(len(d_c), dtype=float)
+            t_c = np.arange(1, len(d_c) + 1, dtype=float)
             S_c = d_c["ev_sales"].cumsum().values
             col = palette[ci % len(palette)]
             fig_cmp.add_trace(go.Scatter(
@@ -177,7 +177,7 @@ def render(df: pd.DataFrame):
             ))
             try:
                 bass_c = BassDiffusion(); bass_c.fit(t_c, S_c)
-                t_ext  = np.arange(0, len(t_c) + horizon, dtype=float)
+                t_ext  = np.arange(1, len(t_c) + horizon + 1, dtype=float)
                 y_ext  = np.arange(int(d_c["year"].min()),
                                     int(d_c["year"].min()) + len(t_ext))
                 fig_cmp.add_trace(go.Scatter(
@@ -207,13 +207,13 @@ def render(df: pd.DataFrame):
         for ci, ctry in enumerate(all_compare):
             d_c = df[df["country"] == ctry].sort_values("year")
             if len(d_c) < 4: continue
-            t_c = np.arange(len(d_c), dtype=float)
+            t_c = np.arange(1, len(d_c) + 1, dtype=float)
             S_c = d_c["ev_sales"].cumsum().values
             col = palette[ci % len(palette)]
             try:
                 bass_c = BassDiffusion(); bass_c.fit(t_c, S_c)
                 M_c    = bass_c.get_params().get("M", 1)
-                t_ext  = np.arange(0, len(t_c) + horizon, dtype=float)
+                t_ext  = np.arange(1, len(t_c) + horizon + 1, dtype=float)
                 y_ext  = np.arange(int(d_c["year"].min()),
                                     int(d_c["year"].min()) + len(t_ext))
                 pct    = bass_c.predict(t_ext) / M_c * 100
@@ -256,7 +256,7 @@ def render(df: pd.DataFrame):
         for ctry in all_compare:
             d_c = df[df["country"] == ctry].sort_values("year")
             if len(d_c) < 4: continue
-            t_c = np.arange(len(d_c), dtype=float)
+            t_c = np.arange(1, len(d_c) + 1, dtype=float)
             S_c = d_c["ev_sales"].cumsum().values
             try:
                 bass_c = BassDiffusion(); bass_c.fit(t_c, S_c)

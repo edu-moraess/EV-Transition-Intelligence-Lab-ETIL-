@@ -15,8 +15,8 @@ def render(df: pd.DataFrame):
     st.markdown(
         "Point forecasts are misleading. Instead, we use a **Bayesian Gaussian Process** to model "
         "the trend with uncertainty, then run **2,000 Monte Carlo simulations** to produce "
-        "a full probability distribution of possible futures. "
-        "The result is not a single number — it's a range, with honest confidence intervals."
+        "an empirical distribution of possible futures. "
+        "The result is not a single number — it is a scenario-conditioned range of simulated outcomes."
     )
     st.markdown("---")
 
@@ -78,14 +78,14 @@ def render(df: pd.DataFrame):
         y=np.concatenate([hi / 1e3, lo[::-1] / 1e3]),
         fill="toself", fillcolor="rgba(31,58,110,0.07)",
         line=dict(color="rgba(0,0,0,0)"),
-        name="95% CI", hoverinfo="skip",
+        name="95% empirical interval", hoverinfo="skip",
     ))
     fig.add_trace(go.Scatter(
         x=np.concatenate([yrs_f, yrs_f[::-1]]),
         y=np.concatenate([hi80 / 1e3, lo80[::-1] / 1e3]),
         fill="toself", fillcolor="rgba(31,58,110,0.12)",
         line=dict(color="rgba(0,0,0,0)"),
-        name="80% CI", hoverinfo="skip",
+        name="80% empirical interval", hoverinfo="skip",
     ))
     fig.add_trace(go.Scatter(
         x=yrs_f, y=med / 1e3, mode="lines",
