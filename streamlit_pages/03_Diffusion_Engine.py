@@ -9,8 +9,9 @@ from visualization.theme import chart_config, base_layout, NAVY, GREEN_DARK, RED
 _COLORS = {"Bass": NAVY, "Logistic": GREEN_DARK, "Gompertz": AMBER}
 
 
-def render(df: pd.DataFrame):
-    st.markdown("## Diffusion Engine")
+def render(df: pd.DataFrame, embedded: bool = False):
+    if not embedded:
+        st.markdown("## Diffusion Engine")
     st.markdown(
         "Technology adoption follows S-shaped curves — slow at first, then explosive, then plateauing. "
         "Three models capture this: **Bass** models innovation vs imitation; "
@@ -72,7 +73,7 @@ def render(df: pd.DataFrame):
             with param_cols[i]:
                 if name in fitted:
                     d  = diag[name]
-                    lbl = " 🥇" if name == best else ""
+                    lbl = " · best in-sample fit" if name == best else ""
                     st.success(f"**{name}**{lbl}")
                     st.metric("R²",   f"{d['r2']:.4f}")
                     st.metric("RMSE", f"{d['rmse']:,.0f}")

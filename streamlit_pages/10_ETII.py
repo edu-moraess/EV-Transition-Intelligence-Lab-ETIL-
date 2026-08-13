@@ -19,14 +19,12 @@ All component scores are min-max normalised to [0, 100] before combining.
 """
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
 from models.scoring.evqti import EVQTI
 from data.world_bank_client import get_country_fundamentals, get_fundamentals_score, _resolve_iso3
 from visualization.theme import (
     base_layout, chart_config,
-    NAVY, NAVY_LIGHT, NAVY_PALE, GREEN_MED, AMBER, GOLD, RED_DARK, SLATE,
-    QUINTIL_COLORS,
+    NAVY, NAVY_LIGHT, NAVY_PALE,
 )
 
 
@@ -94,9 +92,9 @@ def _compute_etii(df_hash: str, evqti_weight: float, df: pd.DataFrame) -> pd.Dat
     return combined.sort_values("etii_score", ascending=False).reset_index(drop=True)
 
 
-def render(df: pd.DataFrame):
-    dataset = df.attrs.get("dataset", "")
-    st.markdown("## ETII — EV Transition Intelligence Index")
+def render(df: pd.DataFrame, embedded: bool = False):
+    if not embedded:
+        st.markdown("## ETII — EV Transition Intelligence Index")
     st.markdown(
         "The EVQTI identifies *which* markets are early-stage and growing fastest. "
         "But early-stage growth in a country with weak economic infrastructure "
@@ -190,7 +188,7 @@ def render(df: pd.DataFrame):
         "showlegend": False,
     })
     fig1.update_layout(**lay1)
-    st.plotly_chart(fig1, use_container_width=True, config=chart_config())
+    st.plotly_chart(fig1, width="stretch", config=chart_config())
 
     st.markdown("---")
 
@@ -266,7 +264,7 @@ def render(df: pd.DataFrame):
         "showlegend": False,
     })
     fig2.update_layout(**lay2)
-    st.plotly_chart(fig2, use_container_width=True, config=chart_config())
+    st.plotly_chart(fig2, width="stretch", config=chart_config())
 
     st.markdown("---")
 
@@ -281,7 +279,7 @@ def render(df: pd.DataFrame):
     disp["Fundamentals"]  = disp["Fundamentals"].fillna("—").apply(
         lambda v: f"{v:.1f}" if isinstance(v, float) else v
     )
-    st.dataframe(disp, use_container_width=True, hide_index=True)
+    st.dataframe(disp, width="stretch", hide_index=True)
 
     with st.expander("How is ETII calculated?"):
         st.markdown(f"""

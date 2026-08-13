@@ -6,15 +6,15 @@ import plotly.graph_objects as go
 from models.scoring.evqti import EVQTI
 from visualization.theme import (
     base_layout, bar_color_signed, chart_config,
-    NAVY, NAVY_LIGHT, NAVY_PALE, RED_DARK, GREEN_MED, AMBER, SLATE,
-    QUINTIL_COLORS,
+    NAVY, NAVY_LIGHT, NAVY_PALE, QUINTIL_COLORS,
 )
 
 
-def render(df: pd.DataFrame):
+def render(df: pd.DataFrame, embedded: bool = False):
     dataset = df.attrs.get("dataset", "")
 
-    st.markdown("## EVQTI Ranking")
+    if not embedded:
+        st.markdown("## EVQTI Ranking")
     st.markdown(
         "The **EV Quant Transition Index** answers a specific question: "
         "*which countries are most likely to see the fastest EV growth over the next year?*"

@@ -15,7 +15,6 @@ translated into institutional research language, with full explainability.
 """
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
 from models.scoring.factor_engine import FactorEngine
 from models.forecasting.regime_forecast import RegimeAwareForecastEngine
@@ -23,9 +22,7 @@ from analytics.narrative_engine import NarrativeEngine
 from ingestion.loader import IEALoader
 from data.fuel_loader import load_fuel_prices
 from visualization.theme import (
-    base_layout, chart_config, bar_color_signed,
-    NAVY, NAVY_LIGHT, NAVY_PALE, GREEN_MED, GREEN_DARK,
-    AMBER, GOLD, RED_DARK, SLATE, QUINTIL_COLORS,
+    base_layout, chart_config, NAVY, NAVY_LIGHT, NAVY_PALE, GREEN_MED, AMBER, RED_DARK, SLATE,
 )
 
 _REGIME_COLORS = {
@@ -57,24 +54,25 @@ def _run_factor_engine(dataset: str, mode: str, _df: pd.DataFrame) -> dict:
 
 
 @st.cache_data(ttl=600, show_spinner="Running regime forecasts...")
-def _run_regime_forecasts(dataset: str, countries: tuple, _df: pd.DataFrame) -> dict:
+def _run_regime_forecasts(dataset: str, countries: tuple, horizon: int, _df: pd.DataFrame) -> dict:
     rfm     = RegimeAwareForecastEngine(n_simulations=500)
     results = {}
     for c in countries:
         c_df = _df[_df["country"] == c].sort_values("year")
         if len(c_df) < 4:
             continue
-        r = rfm.forecast(c_df, horizon=10)
+        r = rfm.forecast(c_df, horizon=horizon)
         if "error" not in r:
             results[c] = r
     return results
 
 
-def render(df: pd.DataFrame):
+def render(df: pd.DataFrame, embedded: bool = False):
     dataset = df.attrs.get("dataset", "")
     mode    = df.attrs.get("vehicle_mode", "Cars")
 
-    st.markdown("## Research Intelligence")
+    if not embedded:
+        st.markdown("## Research Intelligence")
     st.markdown(
         "An integrated quantitative research view — factor scores, regime-aware forecasts "
         "and automated narratives, all derived from the same data pipeline with no manual overrides."
@@ -87,9 +85,9 @@ def render(df: pd.DataFrame):
 
     # ── Tab layout ────────────────────────────────────────────────────────────
     tab1, tab2, tab3 = st.tabs([
-        "🎯 Multi-Factor Rankings",
-        "📈 Regime-Aware Forecast",
-        "📝 Research Narratives",
+        "Multi-factor rankings",
+        "Regime-aware forecast",
+        "Research narratives",
     ])
 
     # ════════════════════════════════════════════════════════════════════════
@@ -147,7 +145,7 @@ def render(df: pd.DataFrame):
                        "yaxis": {**lay_r.get("yaxis",{}), "title": ""},
                        "showlegend": False, "margin": {**lay_r.get("margin",{}), "r": 60}})
         fig_r.update_layout(**lay_r)
-        st.plotly_chart(fig_r, use_container_width=True, config=chart_config())
+        st.plotly_chart(fig_r, width="stretch", config=chart_config())
 
         # Driver decomposition for selected country
         st.markdown("#### Factor decomposition — what is driving each country's score?")
@@ -181,7 +179,7 @@ def render(df: pd.DataFrame):
                 lay_d.update({"xaxis": {**lay_d.get("xaxis",{}), "title": "Contribution to score"},
                                "showlegend": False})
                 fig_d.update_layout(**lay_d)
-                st.plotly_chart(fig_d, use_container_width=True, config=chart_config())
+                st.plotly_chart(fig_d, width="stretch", config=chart_config())
 
     # ════════════════════════════════════════════════════════════════════════
     # TAB 2 — REGIME-AWARE FORECAST
@@ -205,7 +203,7 @@ def render(df: pd.DataFrame):
 
         with st.spinner(f"Simulating {fc_country} under all regimes..."):
             fc_results = _run_regime_forecasts(
-                dataset, (fc_country,), df
+                dataset, (fc_country,), int(fc_horizon), df
             )
 
         if fc_country not in fc_results:
@@ -217,7 +215,6 @@ def render(df: pd.DataFrame):
         bl      = result["baseline"]
         prior   = result["prior_applied"]
         narr    = result["narrative"]
-        params  = result["bass_params"]
 
         # Regime summary
         r1, r2, r3, r4 = st.columns(4)
@@ -288,7 +285,7 @@ def render(df: pd.DataFrame):
         lay_f.update({"xaxis": {**lay_f.get("xaxis",{}), "title": "Year"},
                        "yaxis": {**lay_f.get("yaxis",{}), "title": "Thousand EV units / year"}})
         fig_f.update_layout(**lay_f)
-        st.plotly_chart(fig_f, use_container_width=True, config=chart_config())
+        st.plotly_chart(fig_f, width="stretch", config=chart_config())
         st.caption(f"**Implication:** {narr['implication']}")
 
         # Percentile table
@@ -297,7 +294,7 @@ def render(df: pd.DataFrame):
             for col in ["median","p10","p90","p5","p95","mean"]:
                 disp[col] = (disp[col] / 1e3).round(1)
             disp.columns = ["Year","Median (k)","P10","P90","P5","P95","Mean"]
-            st.dataframe(disp, use_container_width=True, hide_index=True)
+            st.dataframe(disp, width="stretch", hide_index=True)
 
     # ════════════════════════════════════════════════════════════════════════
     # TAB 3 — RESEARCH NARRATIVES
@@ -392,4 +389,4 @@ def render(df: pd.DataFrame):
             st.markdown("#### Top 10 — Multi-Factor Score")
             top10 = ranking.head(10)[["country","composite_score","n_factors_used"]].copy()
             top10.columns = ["Country","Score","Factors used"]
-            st.dataframe(top10, use_container_width=True, hide_index=True)
+            st.dataframe(top10, width="stretch", hide_index=True)

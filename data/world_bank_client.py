@@ -20,8 +20,9 @@ Design for resilience:
   - Returns empty dict/DataFrame on total failure — never raises into the UI
 """
 
+from datetime import datetime, timezone
+
 import requests
-import pandas as pd
 import numpy as np
 import streamlit as st
 from utils.logger import setup_logger
@@ -133,7 +134,11 @@ def get_country_fundamentals(country: str) -> dict:
     if not iso3:
         return {"country": country, "iso3": None, "coverage": 0, "error": "unmapped_country"}
 
-    result = {"country": country, "iso3": iso3}
+    result = {
+        "country": country,
+        "iso3": iso3,
+        "retrieved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
     coverage = 0
 
     for key, code in _INDICATORS.items():

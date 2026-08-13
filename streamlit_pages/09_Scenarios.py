@@ -9,17 +9,17 @@ in analytics/scenario_engine.py.
 """
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
 from analytics.scenario_engine import ScenarioEngine
 from visualization.theme import (
     base_layout, chart_config,
-    NAVY, NAVY_LIGHT, GREEN_MED, AMBER, GOLD, RED_DARK, SLATE,
+    NAVY, GREEN_MED, RED_DARK, SLATE,
 )
 
 
-def render(df: pd.DataFrame):
-    st.markdown("## Scenario Engine — What If?")
+def render(df: pd.DataFrame, embedded: bool = False):
+    if not embedded:
+        st.markdown("## Scenario Engine — What If?")
     st.markdown(
         "Point forecasts are too certain. Real policy decisions live in a space of "
         "possible futures — not a single line. This tool lets you define alternative "
@@ -70,7 +70,7 @@ def render(df: pd.DataFrame):
                           help="Higher M = more infrastructure, higher income, lower EV prices")
 
     with col_s3:
-        st.markdown("##### 🔴 Conservative")
+        st.markdown("##### Conservative")
         p_con = st.slider("Innovation rate (p) -%", 0, 50, 15, key="p_con")
         q_con = st.slider("Imitation rate (q) -%", 0, 50, 10, key="q_con")
         m_con = st.slider("Market ceiling (M) -%", 0, 50, 20, key="m_con")
@@ -81,13 +81,13 @@ def render(df: pd.DataFrame):
     try:
         engine = ScenarioEngine(df, selected)
 
-        baseline = engine.run_scenario("Baseline", {})
+        baseline = engine.run_scenario("Baseline", {}, horizon=horizon)
         optimistic = engine.run_scenario("Optimistic", {
             "p": p_opt / 100, "q": q_opt / 100, "M": m_opt / 100,
-        })
+        }, horizon=horizon)
         conservative = engine.run_scenario("Conservative", {
             "p": -p_con / 100, "q": -q_con / 100, "M": -m_con / 100,
-        })
+        }, horizon=horizon)
 
     except Exception as e:
         st.error(f"Scenario engine error: {e}")
@@ -174,8 +174,7 @@ def render(df: pd.DataFrame):
     st.plotly_chart(fig1, config=chart_config())
 
     # ── Summary table ─────────────────────────────────────────────────────────
-    st.markdown("### 10-year summary")
-    last_hist_sales = hist_sales[-1] if len(hist_sales) > 0 else 0
+    st.markdown(f"### {horizon}-year summary")
     rows = []
     for name, sdf in [("Baseline", baseline),
                        ("Optimistic", optimistic),
@@ -200,7 +199,7 @@ def render(df: pd.DataFrame):
             "Scenario": name,
             "Peak sales": f"{peak / 1e3:.0f}k",
             f"Sales in {int(future_only['year'].iloc[-1])}": f"{final / 1e3:.0f}k",
-            "Total (10yr)": f"{total / 1e6:.2f}M",
+            f"Total ({horizon}yr)": f"{total / 1e6:.2f}M",
             "vs Baseline": "—" if name == "Baseline" else "",
         })
     if rows:
