@@ -5,8 +5,8 @@ import numpy as np
 import plotly.graph_objects as go
 from analytics.global_ranking import GlobalRanking
 from visualization.theme import (
-    chart_config, base_layout, bar_color_signed,
-    NAVY, NAVY_LIGHT, NAVY_PALE, RED_DARK, GREEN_MED, AMBER, GOLD, SLATE,
+    chart_config, base_layout,
+    NAVY, NAVY_LIGHT, NAVY_PALE, GREEN_MED, AMBER, GOLD, SLATE,
 )
 
 _REGIONS = {
@@ -26,6 +26,25 @@ def _region(c):
     for r, cs in _REGIONS.items():
         if c in cs: return r
     return "Other"
+
+
+def _global_sales_timeseries(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+    """Aggregate global EV sales, adding a per-capita series only when supported."""
+    has_population = bool("population" in df.columns and df["population"].notna().any())
+    aggregations = {"ev_sales": ("ev_sales", "sum")}
+    if has_population:
+        aggregations["population"] = ("population", "sum")
+
+    ts = df.groupby("year").agg(**aggregations).reset_index()
+    ts["yoy"] = ts["ev_sales"].pct_change() * 100
+    ts["per_capita"] = np.nan
+    if has_population:
+        ts["per_capita"] = np.where(
+            ts["population"] > 1e6,
+            ts["ev_sales"] / ts["population"] * 1000,
+            np.nan,
+        )
+    return ts, has_population
 
 
 def render(df: pd.DataFrame):
@@ -68,18 +87,16 @@ def render(df: pd.DataFrame):
 
     # ── Toggle: Volume vs Per Capita ─────────────────────────────────────────
     st.markdown("### Global sales trend")
-    view_mode = st.radio("View", ["Volume", "Per Capita"], horizontal=True,
-                          help="Per Capita = EVs sold per 1,000 inhabitants. Removes size advantage of large countries.")
-
-    ts = df.groupby("year").agg(ev_sales=("ev_sales","sum"),
-                                 population=("population","sum")).reset_index()
-    ts["yoy"]        = ts["ev_sales"].pct_change() * 100
-    # Guard: population=0 for recent years where World Bank data is unavailable
-    ts["per_capita"] = np.where(
-        ts["population"] > 1e6,
-        ts["ev_sales"] / ts["population"] * 1000,
-        np.nan
+    ts, has_population = _global_sales_timeseries(df)
+    available_views = ["Volume", "Per Capita"] if has_population else ["Volume"]
+    view_mode = st.radio(
+        "View",
+        available_views,
+        horizontal=True,
+        help="Per capita is available only when the selected panel includes population data.",
     )
+    if not has_population:
+        st.caption("Per-capita view is unavailable because this IEA panel does not include population data.")
 
     y_col   = "per_capita" if view_mode == "Per Capita" else "ev_sales"
     y_label = "EVs per 1,000 inhabitants" if view_mode == "Per Capita" else "Million units"
@@ -180,7 +197,7 @@ def render(df: pd.DataFrame):
         st.plotly_chart(fig_reg, use_container_width=True, config=chart_config())
 
     with col_r:
-        st.markdown(f"### Top 10 fastest-growing markets")
+        st.markdown("### Top 10 fastest-growing markets")
         st.caption(f"YoY growth — {latest} — countries with >1,000 EV sales")
         top_gr = (
             df_l[df_l["ev_sales"] > 1000]
