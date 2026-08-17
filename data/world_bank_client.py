@@ -20,10 +20,10 @@ Design for resilience:
   - Returns empty dict/DataFrame on total failure — never raises into the UI
 """
 
-import requests
-import pandas as pd
 import numpy as np
+import requests
 import streamlit as st
+
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -69,7 +69,12 @@ def _resolve_iso3(country: str) -> str | None:
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def fetch_indicator(iso3: str, indicator_code: str, latest_only: bool = True) -> dict:
+def fetch_indicator(
+    iso3: str,
+    indicator_code: str,
+    latest_only: bool = True,
+    reference_year: int | None = None,
+) -> dict:
     """
     Fetch a single indicator for a single country.
 
@@ -80,6 +85,8 @@ def fetch_indicator(iso3: str, indicator_code: str, latest_only: bool = True) ->
 
     url = f"{_BASE_URL}/{iso3}/indicator/{indicator_code}"
     params = {"format": "json", "per_page": 10}
+    if reference_year is not None:
+        params["date"] = f"1960:{int(reference_year)}"
 
     try:
         resp = requests.get(url, params=params, timeout=_TIMEOUT)
@@ -111,7 +118,7 @@ def fetch_indicator(iso3: str, indicator_code: str, latest_only: bool = True) ->
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def get_country_fundamentals(country: str) -> dict:
+def get_country_fundamentals(country: str, reference_year: int | None = None) -> dict:
     """
     Fetch all configured indicators for a single country.
 
@@ -137,7 +144,7 @@ def get_country_fundamentals(country: str) -> dict:
     coverage = 0
 
     for key, code in _INDICATORS.items():
-        res = fetch_indicator(iso3, code)
+        res = fetch_indicator(iso3, code, reference_year=reference_year)
         if res["ok"]:
             result[key] = res["value"]
             result[f"{key}_year"] = res["year"]
@@ -165,31 +172,33 @@ def get_fundamentals_score(fundamentals: dict) -> float | None:
         return None
 
     # (value, reasonable_min, reasonable_max, higher_is_better)
-    components = []
+    components: list[tuple[float, float]] = []
 
     if "gdp_per_capita" in fundamentals:
         v = fundamentals["gdp_per_capita"]
         norm = np.clip((v - 500) / (80000 - 500), 0, 1)
-        components.append(norm)
+        components.append((float(norm), 1.0))
 
     if "urbanization" in fundamentals:
         v = fundamentals["urbanization"]
         norm = np.clip(v / 100, 0, 1)
-        components.append(norm)
+        components.append((float(norm), 1.0))
 
     if "gdp_growth" in fundamentals:
         v = fundamentals["gdp_growth"]
         norm = np.clip((v + 5) / (10 + 5), 0, 1)  # -5% to +10% range
-        components.append(norm)
+        components.append((float(norm), 1.0))
 
     if "co2_per_capita" in fundamentals:
         # Higher CO2/capita can mean more pressure to electrify — treated as neutral-to-positive,
         # capped to avoid rewarding extreme emitters disproportionately
         v = fundamentals["co2_per_capita"]
         norm = np.clip(v / 15, 0, 1)
-        components.append(norm * 0.5)  # half-weighted — directional ambiguity acknowledged
+        components.append((float(norm), 0.5))  # half-weighted — directional ambiguity acknowledged
 
     if not components:
         return None
 
-    return round(float(np.mean(components)) * 100, 1)
+    weighted_sum = sum(value * weight for value, weight in components)
+    total_weight = sum(weight for _, weight in components)
+    return round(float(weighted_sum / total_weight) * 100, 1)

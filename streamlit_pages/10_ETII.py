@@ -17,16 +17,22 @@ These two signals are complementary, not redundant:
 Design: equally-weighted composite (50/50) by default, adjustable via slider.
 All component scores are min-max normalised to [0, 100] before combining.
 """
-import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
+import streamlit as st
+
+from data.world_bank_client import (
+    _resolve_iso3,
+    get_country_fundamentals,
+    get_fundamentals_score,
+)
 from models.scoring.evqti import EVQTI
-from data.world_bank_client import get_country_fundamentals, get_fundamentals_score, _resolve_iso3
 from visualization.theme import (
-    base_layout, chart_config,
-    NAVY, NAVY_LIGHT, NAVY_PALE, GREEN_MED, AMBER, GOLD, RED_DARK, SLATE,
-    QUINTIL_COLORS,
+    NAVY,
+    NAVY_LIGHT,
+    NAVY_PALE,
+    base_layout,
+    chart_config,
 )
 
 
@@ -49,6 +55,7 @@ def _compute_etii(df_hash: str, evqti_weight: float, df: pd.DataFrame) -> pd.Dat
 
     # ── World Bank Fundamentals (one call per country, each isolated) ──
     countries  = evqti_df["country"].tolist()
+    reference_year = int(df["year"].max()) if df["year"].notna().any() else None
     fund_rows  = []
     successful = 0
 
@@ -58,7 +65,7 @@ def _compute_etii(df_hash: str, evqti_weight: float, df: pd.DataFrame) -> pd.Dat
             fund_rows.append({"country": c, "fund_score": None})
             continue
         try:
-            f     = get_country_fundamentals(c)
+            f     = get_country_fundamentals(c, reference_year=reference_year)
             score = get_fundamentals_score(f)
             fund_rows.append({"country": c, "fund_score": score})
             if score is not None:

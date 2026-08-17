@@ -1,16 +1,25 @@
 # streamlit_pages/02_Country_Lab.py
-import streamlit as st
-import pandas as pd
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
 from plotly.subplots import make_subplots
+
 from analytics.country_analysis import CountryAnalyzer
-from models.diffusion import BassDiffusion, LogisticGrowth, GompertzModel
-from data.fuel_loader import get_fuel_summary, get_monthly_fuel, covered_countries
+from data.fuel_loader import covered_countries, get_fuel_summary, get_monthly_fuel
 from data.world_bank_client import get_country_fundamentals, get_fundamentals_score
+from models.diffusion import BassDiffusion, GompertzModel, LogisticGrowth
 from visualization.theme import (
-    base_layout, bar_color_signed, chart_config,
-    NAVY, NAVY_LIGHT, RED_DARK, GREEN_DARK, GREEN_MED, AMBER, SLATE
+    AMBER,
+    GREEN_DARK,
+    GREEN_MED,
+    NAVY,
+    NAVY_LIGHT,
+    RED_DARK,
+    SLATE,
+    bar_color_signed,
+    base_layout,
+    chart_config,
 )
 
 _DIFF_COLORS  = {"Bass": NAVY, "Logistic": GREEN_DARK, "Gompertz": AMBER}
@@ -87,7 +96,8 @@ def render(df: pd.DataFrame):
                            "High volatility can make EVs a more stable-cost alternative.")
 
     # ── Country fundamentals (World Bank) ──────────────────────────────────────
-    fundamentals = get_country_fundamentals(selected)
+    reference_year = int(data["year"].max()) if data["year"].notna().any() else None
+    fundamentals = get_country_fundamentals(selected, reference_year=reference_year)
     if fundamentals.get("coverage", 0) > 0:
         st.markdown("---")
         st.markdown("### Economic context")

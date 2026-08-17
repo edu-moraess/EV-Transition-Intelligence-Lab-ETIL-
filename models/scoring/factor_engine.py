@@ -25,10 +25,11 @@ Output:
   - ic_by_factor     (empirical IC per factor, for validation)
 """
 
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 from scipy import stats
-from typing import Optional
+
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -68,21 +69,23 @@ class FactorEngine:
     narrative = engine.get_drivers(country="Brazil")
     """
 
-    def __init__(self, weights: Optional[dict] = None):
+    def __init__(self, weights: dict | None = None):
         self.weights      = weights or {}   # override calibrated weights if needed
         self.fitted       = False
         self.panel_       = pd.DataFrame()
         self.scores_      = pd.DataFrame()
         self.ic_by_factor_= pd.DataFrame()
         self._calibrated_weights: dict = {}
+        self.calibration_end_year_: int | None = None
 
     # ── Public API ────────────────────────────────────────────────────────────
 
     def fit(
         self,
         df: pd.DataFrame,
-        fuel_df: Optional[pd.DataFrame] = None,
-        infra_df: Optional[pd.DataFrame] = None,
+        fuel_df: pd.DataFrame | None = None,
+        infra_df: pd.DataFrame | None = None,
+        calibration_end_year: int | None = None,
     ) -> "FactorEngine":
         """
         Build multi-factor panel, calibrate weights by |IC|, score all countries.
@@ -95,12 +98,21 @@ class FactorEngine:
                    from IEALoader.get_aggregator(2026).ev_per_charger()
                    If None, uses the panel's ev_per_charger column (may be unreliable).
         """
-        panel = self._build_panel(df, fuel_df, infra_df)
+        if "year" not in df.columns or df["year"].dropna().empty:
+            logger.error("FactorEngine: input has no usable year column.")
+            return self
+        as_of_year = int(pd.to_numeric(df["year"], errors="coerce").max())
+        cutoff = as_of_year - 1 if calibration_end_year is None else int(calibration_end_year)
+        if cutoff >= as_of_year:
+            raise ValueError("calibration_end_year must be before the latest scoring year.")
+        self.calibration_end_year_ = cutoff
+
+        panel = self._build_panel(df, fuel_df, infra_df, calibration_end_year=cutoff)
         if panel.empty:
             logger.error("FactorEngine: empty panel after build.")
             return self
 
-        self._calibrated_weights = self.weights or self._calibrate_weights(panel)
+        self._calibrated_weights = self.weights or self._calibrate_weights(panel, cutoff)
         self.scores_  = self._score_panel(panel)
         self.panel_   = panel
         self.fitted   = True
@@ -112,7 +124,7 @@ class FactorEngine:
         )
         return self
 
-    def get_ranking(self, n: Optional[int] = None) -> pd.DataFrame:
+    def get_ranking(self, n: int | None = None) -> pd.DataFrame:
         """
         Full country ranking by composite score.
 
@@ -212,14 +224,18 @@ class FactorEngine:
     def _build_panel(
         self,
         df: pd.DataFrame,
-        fuel_df: Optional[pd.DataFrame],
-        infra_df: Optional[pd.DataFrame] = None,
+        fuel_df: pd.DataFrame | None,
+        infra_df: pd.DataFrame | None = None,
+        calibration_end_year: int | None = None,
     ) -> pd.DataFrame:
         """
         Merge all feature sources into a single lagged panel.
         All features are shifted 1 year to ensure t-1 alignment.
         """
         panel = df.copy()
+        panel["year"] = pd.to_numeric(panel["year"], errors="coerce")
+        if calibration_end_year is None:
+            calibration_end_year = int(panel["year"].max()) - 1
 
         # Merge IEA ev_per_charger (real values from Aggregator, not derived column)
         if infra_df is not None and not infra_df.empty:
@@ -253,30 +269,40 @@ class FactorEngine:
                 continue
             lag_col = f"{col}_lag1"
             panel[lag_col] = (
-                panel.sort_values("year")
+                panel.sort_values(["country", "year"])
                 .groupby("country")[col]
                 .transform(lambda x: x.shift(1))
             )
-            # Winsorise at P1/P99 of the lag's own distribution
-            lo = panel[lag_col].quantile(_WIN_LO)
-            hi = panel[lag_col].quantile(_WIN_HI)
-            panel[lag_col] = panel[lag_col].clip(lo, hi)
+            # Winsorise using calibration years only; never use future rows.
+            calibration_values = panel.loc[
+                panel["year"].le(calibration_end_year), lag_col
+            ].dropna()
+            if len(calibration_values) >= 10:
+                lo = calibration_values.quantile(_WIN_LO)
+                hi = calibration_values.quantile(_WIN_HI)
+                panel[lag_col] = panel[lag_col].clip(lo, hi)
             active_factors[factor_name] = (lag_col, direction, group)
 
         # Compute target: next-year growth (t+1)
         panel["growth_t1"] = (
-            panel.sort_values("year")
+            panel.sort_values(["country", "year"])
             .groupby("country")["growth_rate"]
             .transform(lambda x: x.shift(-1))
         )
-        lo_t = panel["growth_t1"].quantile(_TARGET_WIN_LO)
-        hi_t = panel["growth_t1"].quantile(_TARGET_WIN_HI)
-        panel["growth_t1_win"] = panel["growth_t1"].clip(lo_t, hi_t)
+        calibration_target = panel.loc[
+            panel["year"].le(calibration_end_year), "growth_t1"
+        ].dropna()
+        if len(calibration_target) >= 10:
+            lo_t = calibration_target.quantile(_TARGET_WIN_LO)
+            hi_t = calibration_target.quantile(_TARGET_WIN_HI)
+            panel["growth_t1_win"] = panel["growth_t1"].clip(lo_t, hi_t)
+        else:
+            panel["growth_t1_win"] = panel["growth_t1"]
 
         self._active_factors = active_factors
         return panel
 
-    def _calibrate_weights(self, panel: pd.DataFrame) -> dict:
+    def _calibrate_weights(self, panel: pd.DataFrame, calibration_end_year: int) -> dict:
         """
         Calibrate factor weights by empirical |IC| against next-year growth.
         Factors with |IC| < 0.05 or p > 0.20 are excluded.
@@ -284,7 +310,7 @@ class FactorEngine:
         ic_rows = []
         for factor_name, (lag_col, direction, group) in self._active_factors.items():
             year_ics = []
-            for yr in sorted(panel["year"].unique()):
+            for yr in sorted(panel.loc[panel["year"].le(calibration_end_year), "year"].unique()):
                 sub = panel[panel["year"] == yr][
                     [lag_col, "growth_t1_win"]
                 ].dropna()

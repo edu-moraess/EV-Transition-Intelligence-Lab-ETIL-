@@ -1,11 +1,49 @@
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-logs/
-.audit_*.txt
+# Secrets
+.streamlit/secrets.toml
 .env
 .env.*
 !.env.example
-.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+
+# Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build and package artifacts
+dist/
+build/
+*.egg
+.eggs/
+
+# Data caches
+data/cache/
+*.feather
+*.parquet
+
+# IDE and OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs and audit artifacts
+*.log
+logs/
+.audit_*.txt
+
+# Testing and type-checking
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/

@@ -16,13 +16,14 @@ Schema differences handled transparently:
   IEA 2025: powertrain='EV' absent from EV sales; only BEV/PHEV/FCEV
 """
 
-import pandas as pd
-import numpy as np
 from pathlib import Path
 from typing import Literal
-from utils.logger import setup_logger
-from ingestion.aggregator import Aggregator
+
+import pandas as pd
+
 from config.settings import RAW_DATA_DIR
+from ingestion.aggregator import Aggregator
+from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
@@ -130,6 +131,13 @@ class IEALoader:
             Columns: country, category, year, mode, ev_sales, ev_stock,
                      ev_sales_share, ev_stock_share, charging_points, data_source
         """
+        if mode == "Total":
+            return self.load_total_dataset(
+                year,
+                category=category,
+                countries_only=countries_only,
+            )
+
         df_raw    = self.load_raw(year)
         schema    = self._detect_schema(df_raw)
         agg       = Aggregator(df_raw, schema=schema)
@@ -148,6 +156,54 @@ class IEALoader:
             f"{panel['country'].nunique()} countries | {panel.shape[0]} rows"
         )
         return panel
+
+    def load_total_dataset(
+        self,
+        year: Literal[2025, 2026],
+        category: str = "Historical",
+        countries_only: bool = True,
+    ) -> pd.DataFrame:
+        """Load an all-vehicle-mode panel with denominator-weighted shares."""
+        df_raw = self.load_raw(year)
+        schema = self._detect_schema(df_raw)
+        agg = Aggregator(df_raw, schema=schema)
+        sales = agg.total_ev_all_modes(category=category)
+        stock = agg.total_ev_stock_all_modes(category=category)
+        charging = agg.charging_points(category=category)
+        sales_share = agg.total_ev_sales_share(category=category)
+        stock_share = agg.total_ev_stock_share(category=category)
+        panel = (
+            sales.merge(
+                stock[["country", "year", "ev_stock_total"]],
+                on=["country", "year"],
+                how="left",
+            )
+            .merge(
+                charging[["country", "year", "charging_points"]],
+                on=["country", "year"],
+                how="left",
+            )
+            .merge(
+                sales_share[["country", "year", "ev_sales_share", "share_coverage"]],
+                on=["country", "year"],
+                how="left",
+            )
+            .merge(
+                stock_share[["country", "year", "ev_stock_share", "share_coverage"]],
+                on=["country", "year"],
+                how="left",
+                suffixes=("_sales", "_stock"),
+            )
+            .rename(columns={"ev_sales_total": "ev_sales", "ev_stock_total": "ev_stock"})
+        )
+        if countries_only:
+            panel = self._filter_aggregates(panel)
+        if category == "Historical":
+            panel = panel[~panel["year"].isin(_PROJECTION_YEARS)]
+        panel["mode"] = "Total"
+        panel["share_coverage"] = panel[["share_coverage_sales", "share_coverage_stock"]].min(axis=1)
+        panel["data_source"] = schema
+        return panel.sort_values(["country", "year"]).reset_index(drop=True)
 
     def load_all_datasets(
         self,

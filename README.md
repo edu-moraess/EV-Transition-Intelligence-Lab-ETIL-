@@ -56,7 +56,9 @@ A classificação de regimes usa um **Gaussian Mixture Model (GMM)**. Os rótulo
 
 O EVQTI é um fator de pesquisa que utiliza shares de estoque e vendas de EV defasados para avaliar associação com crescimento futuro de vendas. A construção mantém o target em `t+1` separado das features em `t-1`, mas o resultado ainda deve ser avaliado em janelas temporais pré-especificadas antes de qualquer uso decisório.
 
-O ETII combina o EVQTI com fundamentos do World Bank quando a cobertura externa existe. Uma falha da API reduz a confiabilidade comparativa do componente fundamental; esse fallback não deve ser ocultado ao interpretar rankings.
+O ETII combina o EVQTI com fundamentos do World Bank quando a cobertura externa existe. As consultas macroeconômicas usam o ano máximo do painel EV como referência quando disponível. Uma falha da API reduz a confiabilidade comparativa do componente fundamental; esse fallback não deve ser ocultado ao interpretar rankings.
+
+O modo `Total` agrega todos os modos de veículo e calcula shares ponderados pelos denominadores implícitos de cada modo. A cobertura de vendas e estoque é exposta nas colunas `share_coverage_sales`, `share_coverage_stock` e `share_coverage`.
 
 ## Instalação e execução
 
@@ -75,11 +77,11 @@ Para validar o núcleo do projeto:
 pytest -q
 ```
 
-A auditoria de agosto de 2026 adicionou testes para agregação de dados, missingness, restrições do Bass, reprodutibilidade Monte Carlo e ordenação de quantis de regime. A suíte conta com 37 testes no estado auditado.
+A auditoria de agosto de 2026 adicionou testes para agregação de dados, missingness, modo Total, cutoff temporal do scoring, restrições do Bass, reprodutibilidade Monte Carlo e ordenação de quantis de regime. A suíte conta com 44 testes no estado atual.
 
 ## Limitações conhecidas e próximos passos
 
-A validação temporal formal é a principal prioridade metodológica. O `FactorEngine` ainda calibra winsorização e pesos em um painel completo; para backtests rigorosos, esses parâmetros devem ser ajustados somente no conjunto de treino de cada origem temporal. A escolha do número de regimes também deve comparar K=2–5 por BIC/AIC e estabilidade de cluster.
+A validação temporal formal continua sendo uma prioridade metodológica. O `FactorEngine` agora usa, por padrão, o ano anterior ao último ano do painel como cutoff de calibração e aceita `calibration_end_year` explícito; backtests rigorosos ainda devem ajustar e congelar parâmetros em cada origem temporal. A escolha do número de regimes também deve comparar K=2–5 por BIC/AIC e estabilidade de cluster.
 
 O teto de mercado dos modelos de difusão continua sendo estimado a partir da curva. Antes de tratar projeções como cenários de política ou de mercado, é necessário introduzir hipóteses econômicas externas e comparar sistematicamente erros walk-forward por país e horizonte.
 

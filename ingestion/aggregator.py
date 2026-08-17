@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+import numpy as np
 import pandas as pd
 
 from utils.logger import setup_logger
@@ -67,6 +68,40 @@ class Aggregator:
     def ev_stock_share(self, category: str = "Historical", mode: str = "Cars") -> pd.DataFrame:
         """Return the official EV stock share in percent for one vehicle mode."""
         return self._aggregate_share("EV stock share", "ev_stock_share", category, mode)
+
+    def total_ev_sales_share(
+        self,
+        category: str = "Historical",
+        modes: set[str] | None = None,
+    ) -> pd.DataFrame:
+        """Return a denominator-weighted EV sales share across vehicle modes.
+
+        The IEA publishes mode-specific EV shares but not a single all-mode
+        denominator in the local extracts. For each mode, total sales are
+        reconstructed as ``EV sales / share`` and then summed. The total share
+        is returned only when every mode with EV sales has a valid share.
+        """
+        return self._aggregate_total_share(
+            value_parameter="EV sales",
+            share_parameter="EV sales share",
+            value_name="ev_sales_share",
+            category=category,
+            modes=modes,
+        )
+
+    def total_ev_stock_share(
+        self,
+        category: str = "Historical",
+        modes: set[str] | None = None,
+    ) -> pd.DataFrame:
+        """Return a denominator-weighted EV stock share across vehicle modes."""
+        return self._aggregate_total_share(
+            value_parameter="EV stock",
+            share_parameter="EV stock share",
+            value_name="ev_stock_share",
+            category=category,
+            modes=modes,
+        )
 
     def charging_points(self, category: str = "Historical") -> pd.DataFrame:
         """Return public charging points across the IEA 2025 and 2026 schemas."""
@@ -154,6 +189,57 @@ class Aggregator:
         df = self._filter_base(parameter, category)
         df = df[(df["mode"] == mode) & (df["powertrain"] == _EV_AGGREGATE)]
         return self._mean(df, ["region_country", "category", "year", "mode"], value_name)
+
+    def _aggregate_total_share(
+        self,
+        value_parameter: str,
+        share_parameter: str,
+        value_name: str,
+        category: str,
+        modes: set[str] | None,
+    ) -> pd.DataFrame:
+        vehicle_modes = modes or _VEHICLE_MODES
+        value_df = self._filter_base(value_parameter, category)
+        value_df = self._select_ev_powertrain(value_df[value_df["mode"].isin(vehicle_modes)])
+        value_keys = ["region_country", "category", "year", "mode"]
+        values = self._sum(value_df, value_keys, "numerator")
+
+        share_df = self._filter_base(share_parameter, category)
+        share_df = share_df[
+            share_df["mode"].isin(vehicle_modes)
+            & share_df["powertrain"].eq(_EV_AGGREGATE)
+        ]
+        shares = self._mean(share_df, value_keys, "share")
+        merged = values.merge(shares, on=["country", "category", "year", "mode"], how="left")
+        merged["denominator"] = np.where(
+            merged["share"].gt(0),
+            merged["numerator"] / (merged["share"] / 100.0),
+            np.nan,
+        )
+
+        grouped = (
+            merged.groupby(["country", "category", "year"], dropna=False)
+            .agg(
+                numerator=("numerator", "sum"),
+                denominator=("denominator", "sum"),
+                modes_total=("mode", "count"),
+                modes_with_share=("denominator", lambda values: values.notna().sum()),
+            )
+            .reset_index()
+        )
+        grouped[value_name] = np.where(
+            grouped["modes_total"].eq(grouped["modes_with_share"])
+            & grouped["denominator"].gt(0),
+            grouped["numerator"] / grouped["denominator"] * 100.0,
+            np.nan,
+        )
+        grouped["share_coverage"] = np.divide(
+            grouped["modes_with_share"],
+            grouped["modes_total"],
+            out=np.zeros(len(grouped), dtype=float),
+            where=grouped["modes_total"].gt(0),
+        )
+        return grouped[["country", "category", "year", value_name, "share_coverage"]]
 
     def _filter_base(self, parameter: str, category: str) -> pd.DataFrame:
         df = self.df[(self.df["parameter"] == parameter) & (self.df["category"] == category)].copy()

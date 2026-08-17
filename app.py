@@ -6,14 +6,16 @@ Theme    : Streamlit native (config.toml) — no hardcoded colours in Python
 Dataset  : IEA Global EV Outlook 2025 / 2026 / Combined
 Language : English throughout
 """
-import streamlit as st
-import pandas as pd
-import numpy as np
 import importlib
+
+import numpy as np
+import pandas as pd
+import streamlit as st
+
 from ingestion.dataset_engine import DatasetEngine
 from preprocessing.cleaning import DataCleaner
-from preprocessing.transformation import DataTransformer
 from preprocessing.features import FeatureEngineer
+from preprocessing.transformation import DataTransformer
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -42,7 +44,8 @@ def _run_pipeline(df_raw: pd.DataFrame) -> pd.DataFrame:
     df = DataTransformer(df).add_log_transform(["ev_sales"])
     df = FeatureEngineer(df).engineer()
 
-    assert df.duplicated(subset=["country", "year"]).sum() == 0, "Pipeline produced duplicate country-year entries."
+    if df.duplicated(subset=["country", "year"]).any():
+        raise ValueError("Pipeline produced duplicate country-year entries.")
     return df
 
 
@@ -65,7 +68,7 @@ def get_data(dataset_key: str, vehicle_mode: str) -> pd.DataFrame:
     actual_key = dataset_key
     try:
         df_raw = _try_load(dataset_key)
-    except Exception as e:
+    except (FileNotFoundError, RuntimeError) as e:
         logger.warning(f"Primary dataset '{dataset_key}' failed: {e}. Trying fallback.")
         fallback_order = [k for k in ["2026", "2025"] if k != dataset_key]
         for fb_key in fallback_order:
@@ -74,7 +77,7 @@ def get_data(dataset_key: str, vehicle_mode: str) -> pd.DataFrame:
                 actual_key = fb_key
                 logger.info(f"Fallback to dataset '{fb_key}' succeeded.")
                 break
-            except Exception as fb_e:
+            except (FileNotFoundError, RuntimeError) as fb_e:
                 logger.warning(f"Fallback '{fb_key}' also failed: {fb_e}")
 
     if df_raw.empty:

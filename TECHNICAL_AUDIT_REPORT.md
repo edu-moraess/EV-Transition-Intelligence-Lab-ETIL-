@@ -4,9 +4,15 @@
 **Escopo:** repositório `EV-Transition-Intelligence-Lab-ETIL-`, branch `main`  
 **Commit auditado inicialmente:** `0b20bf10259f31f2b32a9ec0d0749a62a44622e5`
 
+## Adendo de remediação — 17 de agosto de 2026
+
+A branch `fix/technical-audit-remediation` implementou as correções prioritárias da auditoria. O modo `Total` agora é servido pelo `IEALoader` canônico, calcula shares ponderados pelos denominadores implícitos e expõe cobertura parcial. O `FactorEngine` limita winsorização e calibração ao cutoff temporal configurável; o World Bank pode consultar um ano de referência alinhado ao painel EV; o fallback do app está restrito a falhas recuperáveis; a proteção XSRF foi reativada no devcontainer; a documentação metodológica foi sincronizada; `requests` foi declarado diretamente; e os nomes de arquivos com espaço final foram normalizados.
+
+A suíte atual contém **44 testes aprovados**. A validação de compilação, pipeline real para Cars/2-and-3-wheelers/Total e integração analítica foi executada após as alterações. Backtests walk-forward completos para cada origem temporal e seleção formal de número de regimes continuam sendo próximos passos metodológicos, não foram tratados como resolvidos por este patch.
+
 ## Resumo executivo
 
-O ETIL é uma aplicação Streamlit com uma base de código materialmente mais ampla do que a cobertura de testes sugeria. A auditoria mapeou **69 arquivos Python** e aproximadamente **9.077 linhas Python**, sem ciclos de importação locais detectados. A suíte inicial continha 31 testes e passava após a instalação das dependências declaradas; ao final, a suíte passou a conter **37 testes**, todos aprovados.
+O ETIL é uma aplicação Streamlit com uma base de código materialmente mais ampla do que a cobertura de testes sugeria. A auditoria mapeou **69 arquivos Python** e aproximadamente **9.077 linhas Python**, sem ciclos de importação locais detectados. A suíte inicial continha 31 testes e passava após a instalação das dependências declaradas; ao final da auditoria original, a suíte passou a conter **37 testes**. Após o adendo de remediação, a suíte contém **44 testes**, todos aprovados.
 
 A maior fragilidade encontrada não era estética: coexistiam duas rotas de ingestão com semânticas diferentes. A aplicação principal utilizava `DatasetEngine`, enquanto páginas específicas utilizavam `IEALoader` e `Aggregator`. Essa divergência alterava a agregação de shares e eliminava os carregadores do dataset IEA 2025 por assumir indevidamente o rótulo de modo `EVSE`. A refatoração transformou `DatasetEngine` em uma fachada compatível sobre o carregador canônico e corrigiu a agregação por modo/powertrain.
 
@@ -95,8 +101,8 @@ Foi corrigida uma inconsistência concreta no `FactorEngine`: `get_evqti_scores(
 
 | Severidade | Risco remanescente | Consequência |
 |---|---|---|
-| **HIGH** | Winsorização e calibração de pesos do `FactorEngine` usam o painel completo. | Em análise histórica, limites e pesos podem incorporar informação posterior ao forecast origin. |
-| **HIGH** | Não há split temporal formal para calibrar pesos multifatoriais e avaliar o ranking em holdout. | A performance do índice multifatorial não é ainda uma estimativa estritamente out-of-sample. |
+| **MEDIUM** | O `FactorEngine` exige um cutoff temporal explícito para cada protocolo histórico. | O padrão usa o ano anterior ao último ano do painel; sem cutoff por origem, um backtest pode ainda não representar um protocolo walk-forward completo. |
+| **MEDIUM** | Ainda não há um harness formal para avaliar pesos multifatoriais em holdout por origem temporal. | A performance do índice multifatorial continua sem uma estimativa completa e automatizada out-of-sample. |
 | **MEDIUM** | Min–max para 0–100 é relativo ao cross-section disponível. | Scores não são comparáveis entre universos ou datas sem preservar a referência de escala. |
 | **MEDIUM** | Fallback macroeconômico neutro no ETII pode alterar o ranking quando a API externa falha. | A indisponibilidade da fonte deve ser visível no dashboard e nas exportações. |
 
@@ -128,7 +134,7 @@ A refatoração foi deliberadamente limitada aos problemas que alteravam dados, 
 | `models/diffusion/bass.py` e chamadores | Restrições, estabilidade e eixo temporal. | Evitar ajustes inválidos e condição inicial incoerente. | Testes quantitativos e fit real. |
 | `models/forecasting/*` | GP correlacionado, RNG local e quantis honestos. | Melhorar reprodutibilidade e semântica de incerteza. | Testes de reprodutibilidade e forecast real. |
 | `models/regimes/*` e página | GMM/mean shift descritos corretamente. | Evitar apresentar proxies como HMM/Bayesianos. | Testes existentes e inicialização da aplicação. |
-| `models/scoring/factor_engine.py` | Output EVQTI compatível corrigido. | Evitar expor score multifatorial sob a API do EVQTI. | Suíte completa. |
+| `models/scoring/factor_engine.py` | Output EVQTI compatível corrigido e cutoff temporal para calibração. | Evitar expor score multifatorial sob a API do EVQTI e reduzir leakage retrospectivo. | Suíte completa e teste temporal dedicado. |
 
 ## Riscos remanescentes e próximos passos
 
