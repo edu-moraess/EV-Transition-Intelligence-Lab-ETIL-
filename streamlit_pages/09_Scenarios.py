@@ -28,9 +28,9 @@ def render(df: pd.DataFrame):
     )
     st.markdown(
         "Built on the **Bass diffusion model**: "
-        "***p*** = innovation coefficient (early adopters, policy pull), "
-        "***q*** = imitation coefficient (word of mouth, network effects), "
-        "***M*** = market potential (long-run ceiling, shaped by infrastructure and income)."
+        "***p*** = innovation coefficient (early adopters and policy influence), "
+        "***q*** = imitation coefficient (peer effects and network effects), "
+        "***M*** = market potential (long-run ceiling influenced by infrastructure, income and model availability)."
     )
     st.markdown("---")
 
@@ -67,7 +67,7 @@ def render(df: pd.DataFrame):
         q_opt = st.slider("Imitation rate (q) +%", 0, 100, 20, key="q_opt",
                           help="Higher q = stronger network effects (more EVs visible on road)")
         m_opt = st.slider("Market ceiling (M) +%", 0, 100, 40, key="m_opt",
-                          help="Higher M = more infrastructure, higher income, lower EV prices")
+                          help="Higher M = a larger addressable market; infrastructure, income and model availability can influence it")
 
     with col_s3:
         st.markdown("##### 🔴 Conservative")
@@ -99,7 +99,7 @@ def render(df: pd.DataFrame):
     st.markdown(f"### Annual EV sales projections — {selected}")
     st.caption(
         "Annual (not cumulative) EV sales under each scenario. "
-        "The shaded area between optimistic and conservative is the uncertainty band."
+        "The shaded area shows the spread between the optimistic and conservative scenarios; it is not a statistical confidence interval."
     )
 
     fig1 = go.Figure()
@@ -174,7 +174,7 @@ def render(df: pd.DataFrame):
     st.plotly_chart(fig1, config=chart_config())
 
     # ── Summary table ─────────────────────────────────────────────────────────
-    st.markdown("### 10-year summary")
+    st.markdown(f"### {int(horizon)}-year summary")
     last_hist_sales = hist_sales[-1] if len(hist_sales) > 0 else 0
     rows = []
     for name, sdf in [("Baseline", baseline),
@@ -200,7 +200,7 @@ def render(df: pd.DataFrame):
             "Scenario": name,
             "Peak sales": f"{peak / 1e3:.0f}k",
             f"Sales in {int(future_only['year'].iloc[-1])}": f"{final / 1e3:.0f}k",
-            "Total (10yr)": f"{total / 1e6:.2f}M",
+            f"Total ({int(horizon)}yr)": f"{total / 1e6:.2f}M",
             "vs Baseline": "—" if name == "Baseline" else "",
         })
     if rows:

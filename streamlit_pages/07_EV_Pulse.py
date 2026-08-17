@@ -191,8 +191,8 @@ def render(df: pd.DataFrame = None):
     # FIX: remover emoji duplicado — usar título limpo
     st.markdown("## EV Pulse")
     st.markdown(
-        "Live news digest — EV market headlines with AI-generated analysis. "
-        "Stories are pulled from global news sources and summarised by AI."
+        "Recent news digest — EV market headlines with optional AI summaries. "
+        "Stories are pulled from global news sources; summaries are generated only when the AI service is enabled."
     )
     st.markdown("---")
 
@@ -208,13 +208,13 @@ def render(df: pd.DataFrame = None):
             "[newsapi.org/register](https://newsapi.org/register)."
         )
         st.markdown("---")
-        st.markdown("### What you'll see here once configured")
+        st.markdown("### What appears when the news service is configured")
         st.markdown(
-            "- **Topic feed** — latest headlines on EV policy, market moves, "
+            "- **Topic feed** — recent headlines on EV policy, market moves, "
             "infrastructure and technology\n"
             "- **Country feed** — news filtered by country\n"
-            "- **AI summaries** — each article gets a 2-3 sentence analytical "
-            "summary from an AI model, focused on market implications\n"
+            "- **AI summaries** — each article can receive a 2–3 sentence analytical "
+            "summary from an AI model focused on market implications\n"
         )
         return
 
@@ -246,7 +246,7 @@ def render(df: pd.DataFrame = None):
     st.markdown("---")
 
     # ── Fetch news ────────────────────────────────────────────────────────────
-    with st.spinner(f"Fetching latest news on '{query}'..."):
+    with st.spinner(f"Fetching recent news on '{query}'..."):
         result = _fetch_news(query, days=days, max_results=8, api_key=news_key)
 
     if not result["ok"]:
@@ -295,7 +295,7 @@ def render(df: pd.DataFrame = None):
                 context = f"Query was '{query}'. Source: {source}. Focus on EV market implications."
                 summary_result = _ai_summary(title, desc, context, ai_key)
                 if summary_result["ok"]:
-                    st.info(f"📊 **Analysis:** {summary_result['text']}")
+                    st.info(f"📊 **AI summary:** {summary_result['text']}")
                 else:
                     ai_failures += 1
                     if ai_failures == 1:
@@ -312,6 +312,6 @@ def render(df: pd.DataFrame = None):
 
     if ai_on and ai_failures > 1:
         st.caption(
-            f"ℹ️ AI summaries failed for {ai_failures} of {len(articles)} articles "
-            "— likely a temporary rate limit. Headlines are still shown above."
+            f"ℹ️ AI summaries could not be generated for {ai_failures} of {len(articles)} articles. "
+            "Headlines are still shown above."
         )

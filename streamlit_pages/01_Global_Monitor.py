@@ -53,8 +53,8 @@ def render(df: pd.DataFrame):
 
     st.markdown("## ⚡ EV Transition Intelligence Lab")
     st.markdown(
-        "Tracking the global shift to electric vehicles across **60+ countries** — "
-        "where it's happening, how fast, and what the data says about where it's going next."
+        "Tracking the global transition to electric vehicles across the countries covered by the dataset — "
+        "where adoption is happening, how fast it is changing, and what the data shows about the next stage."
     )
     st.caption(f"Source: IEA Global EV Outlook · Dataset: {dataset} · Mode: {mode}")
     st.markdown("---")
@@ -77,16 +77,16 @@ def render(df: pd.DataFrame):
     c1.metric(f"Global EV sales — {latest}", f"{total_l/1e6:.2f}M",
               f"{yoy:+.1f}% vs {prev}",
               help="Total EV units sold globally in the latest year.")
-    c2.metric("Market leader", top_c, f"{top_shr:.1f}% of global sales")
+    c2.metric("EV sales leader", top_c, f"{top_shr:.1f}% of global sales")
     c3.metric("Countries tracked", str(n_ctry))
     c4.metric("Median EV stock share",
               f"{median_shr:.1f}%" if median_shr else "N/A",
-              help="Share of EVs in the total vehicle fleet — median across all countries.")
+              help="Share of EVs in the corresponding vehicle fleet — median across all tracked countries.")
 
     st.markdown("---")
 
     # ── Toggle: Volume vs Per Capita ─────────────────────────────────────────
-    st.markdown("### Global sales trend")
+    st.markdown("### Global EV sales trend")
     ts, has_population = _global_sales_timeseries(df)
     available_views = ["Volume", "Per Capita"] if has_population else ["Volume"]
     view_mode = st.radio(
@@ -96,7 +96,7 @@ def render(df: pd.DataFrame):
         help="Per capita is available only when the selected panel includes population data.",
     )
     if not has_population:
-        st.caption("Per-capita view is unavailable because this IEA panel does not include population data.")
+        st.caption("Per-capita view is unavailable because population data are not included in the selected IEA panel.")
 
     y_col   = "per_capita" if view_mode == "Per Capita" else "ev_sales"
     y_label = "EVs per 1,000 inhabitants" if view_mode == "Per Capita" else "Million units"
@@ -132,8 +132,8 @@ def render(df: pd.DataFrame):
     if "ev_sales_share" in df.columns and df["ev_sales_share"].notna().any():
         st.markdown("### The adoption wave — EV sales share by country over time")
         st.markdown(
-            "Each cell shows the percentage of **new cars sold** that were electric in that year. "
-            "Watch the wave of adoption spread — first Scandinavia, then Europe, now reaching emerging markets."
+            "Each cell shows the percentage of **new vehicles in the selected mode** that were electric in that year. "
+            "The heatmap shows how adoption shares vary over time across the tracked markets."
         )
         hm_data = (
             df[df["ev_sales_share"].notna()]
@@ -175,7 +175,7 @@ def render(df: pd.DataFrame):
     col_l, col_r = st.columns(2)
 
     with col_l:
-        st.markdown("### Where is growth happening?")
+        st.markdown("### Where is EV sales volume concentrated?")
         st.caption(f"EV sales by world region — {latest}")
         df_l2 = df_l.copy()
         df_l2["region"] = df_l2["country"].apply(_region)
@@ -197,8 +197,8 @@ def render(df: pd.DataFrame):
         st.plotly_chart(fig_reg, use_container_width=True, config=chart_config())
 
     with col_r:
-        st.markdown("### Top 10 fastest-growing markets")
-        st.caption(f"YoY growth — {latest} — countries with >1,000 EV sales")
+        st.markdown("### Top 10 markets by YoY growth")
+        st.caption(f"YoY growth in {latest} — countries with more than 1,000 EV sales")
         top_gr = (
             df_l[df_l["ev_sales"] > 1000]
             .sort_values("growth_rate", ascending=False)
@@ -223,10 +223,10 @@ def render(df: pd.DataFrame):
 
     # ── EV Sales Share leaders + vs world average ─────────────────────────────
     if "ev_sales_share" in df_l.columns and df_l["ev_sales_share"].notna().any():
-        st.markdown("### EV sales share — what % of new cars are electric?")
+        st.markdown("### EV sales share — what percentage of new vehicles is electric?")
         st.markdown(
-            "EV *sales share* is the most actionable metric for investors and policymakers: "
-            "of every 100 cars sold this year, how many are electric?"
+            "EV *sales share* is the percentage of new vehicles in the selected mode that are electric — "
+            "in other words, how many of every 100 newly sold vehicles are electric."
         )
         world_avg_share = df_l["ev_sales_share"].mean()
         share_top = (
@@ -292,11 +292,12 @@ def render(df: pd.DataFrame):
     st.markdown("---")
 
     # ── EVQTI preview ─────────────────────────────────────────────────────────
-    st.markdown("### Which emerging markets have the most momentum?")
+    st.markdown("### Which markets show the strongest early-stage signal?")
+
     st.markdown(
-        "The **EVQTI** identifies countries with low current penetration but strong momentum — "
-        "the markets most likely to accelerate next. Norway and Netherlands rank low despite "
-        "being EV leaders, because their markets are maturing naturally."
+        "The **EVQTI** identifies markets with low current penetration and strong recent momentum. "
+        "It is an early-stage signal, not a certainty about future growth. Norway and the Netherlands "
+        "rank lower because their markets are more mature."
     )
     try:
         rdf = GlobalRanking(df).compute_ranking()

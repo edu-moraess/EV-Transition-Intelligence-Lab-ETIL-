@@ -3,16 +3,16 @@
 ETII — EV Transition Intelligence Index
 
 Combines two orthogonal signals into a single composite ranking:
-  1. EVQTI  — momentum signal (early-stage markets grow fastest)
-  2. World Bank Fundamentals Score — structural capacity to sustain the transition
+  1. EVQTI  — momentum signal (early-stage markets can show faster growth during diffusion)
+  2. World Bank Fundamentals Score — economic and structural context indicators
 
 These two signals are complementary, not redundant:
-  - A country with high EVQTI but low fundamentals may be growing fast from a
-    low base, but lacks the economic infrastructure to sustain the surge.
-  - A country with high fundamentals but low EVQTI is wealthy and urbanised,
-    but already penetrated — growth is slowing naturally.
-  - The sweet spot (high both) = early-stage market with structural capacity
-    to sustain the acceleration.
+  - A country with high EVQTI but low fundamentals may show recent momentum from a
+    low base, while its measured structural indicators are weaker.
+  - A country with high fundamentals but low EVQTI has stronger measured context
+    indicators but a weaker early-stage signal in the current sample.
+  - Higher scores on both dimensions indicate a market with a stronger early-stage
+    signal and stronger measured fundamentals in this comparison.
 
 Design: equally-weighted composite (50/50) by default, adjustable via slider.
 All component scores are min-max normalised to [0, 100] before combining.
@@ -98,16 +98,15 @@ def render(df: pd.DataFrame):
     dataset = df.attrs.get("dataset", "")
     st.markdown("## ETII — EV Transition Intelligence Index")
     st.markdown(
-        "The EVQTI identifies *which* markets are early-stage and growing fastest. "
-        "But early-stage growth in a country with weak economic infrastructure "
-        "may not be sustainable. The **ETII** adds a second lens: "
-        "*can this country actually sustain the transition?*"
+        "The EVQTI identifies *which* markets show an early-stage growth signal. "
+        "The **ETII** adds a second lens by combining that signal with measured economic and structural indicators, "
+        "helping compare the conditions that may support continued transition."
     )
 
     col_a, col_b, col_c = st.columns(3)
-    col_a.info("**EVQTI** (50%)\nMomentum signal — early-stage markets with strong growth potential")
+    col_a.info("**EVQTI** (50%)\nMomentum signal — early-stage markets with strong recent growth indicators")
     col_b.info("**Fundamentals** (50%)\nWorld Bank — GDP, urbanization, economic capacity")
-    col_c.success("**ETII** = Composite\nHighest-conviction early-stage opportunities")
+    col_c.success("**ETII** = Composite\nHighest-scoring early-stage markets")
 
     st.markdown("---")
 
@@ -140,7 +139,7 @@ def render(df: pd.DataFrame):
         st.warning(
             "⚠️ World Bank API unavailable — ETII computed with EVQTI only "
             "(Fundamentals Score set to neutral 50). "
-            "The ranking still reflects momentum signal; fundamentals will load when the API is reachable."
+            "The ranking is therefore driven by the momentum signal while fundamentals remain neutral; coverage will load when the API is reachable."
         )
     else:
         st.caption(
@@ -151,14 +150,14 @@ def render(df: pd.DataFrame):
 
     # ── Top KPIs ──────────────────────────────────────────────────────────────
     top3 = etii.head(3)
-    st.markdown("### Top 3 highest-conviction opportunities")
+    st.markdown("### Top 3 highest-scoring early-stage markets")
     k1, k2, k3 = st.columns(3)
     for col, (_, row) in zip([k1, k2, k3], top3.iterrows()):
         col.metric(
             f"#{int(row['etii_rank'])} {row['country']}",
             f"ETII {row['etii_score']:.1f}/100",
             f"EVQTI #{int(row['evqti_rank'])} · Fundamentals #{int(row['fund_rank'])}",
-            help="High ETII = early-stage momentum + strong economic capacity to sustain it."
+            help="High ETII = early-stage momentum combined with stronger measured fundamentals; it is not a forecast or investment recommendation."
         )
 
     st.markdown("---")
@@ -195,12 +194,11 @@ def render(df: pd.DataFrame):
     st.markdown("---")
 
     # ── EVQTI vs Fundamentals scatter ─────────────────────────────────────────
-    st.markdown("### EVQTI vs Fundamentals — the opportunity matrix")
+    st.markdown("### EVQTI vs Fundamentals — comparison matrix")
     st.markdown(
-        "The most interesting countries are in the **top-right quadrant**: "
-        "early-stage (high EVQTI) with strong economic capacity (high Fundamentals). "
-        "Bottom-right = high-capacity but mature markets. "
-        "Top-left = high momentum but structural fragility."
+        "Countries in the **top-right quadrant** combine a stronger early-stage signal (high EVQTI) with higher Fundamentals scores. "
+        "Bottom-right = stronger Fundamentals with a lower early-stage signal. "
+        "Top-left = stronger early-stage signal with lower Fundamentals scores."
     )
 
     fig2 = go.Figure()
@@ -247,10 +245,10 @@ def render(df: pd.DataFrame):
 
     # Quadrant labels
     for (x, y, txt) in [
-        (92, 92, "★ Sweet spot"),
-        (10, 92, "Mature markets"),
-        (92, 10, "High momentum,\nfragile base"),
-        (10, 10, "Limited potential"),
+        (92, 92, "★ Higher signal + stronger fundamentals"),
+        (10, 92, "Stronger fundamentals, lower signal"),
+        (92, 10, "Higher signal, weaker fundamentals"),
+        (10, 10, "Lower scores on both dimensions"),
     ]:
         fig2.add_annotation(x=x, y=y, text=txt, showarrow=False,
                              font=dict(size=8, color="rgba(128,128,128,0.7)"))

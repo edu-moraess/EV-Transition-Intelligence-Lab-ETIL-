@@ -14,9 +14,9 @@ _REGIME_COLORS = {0: SLATE, 1: NAVY_LIGHT, 2: GREEN_MED, 3: AMBER, 4: RED_DARK}
 def render(df: pd.DataFrame):
     st.markdown("## Regime Detection")
     st.markdown(
-        "Not all EV markets are in the same phase. A **Gaussian Mixture Model** classifies each "
-        "year in a country's history into one of four ordered adoption regimes — Emerging, Expansion, "
-        "Acceleration or Maturity. A **mean-shift screening rule** highlights candidate structural breaks; "
+        "Not all EV markets are in the same phase. A **Gaussian Mixture Model** assigns each "
+        "year in a country's history to a configurable number of ordered adoption regimes — Emerging, Expansion, "
+        "Acceleration, Maturity or Peak. A **mean-shift screening rule** highlights candidate structural breaks; "
         "it does not establish causality or identify an economic event by itself."
     )
     st.markdown("---")
@@ -62,7 +62,7 @@ def render(df: pd.DataFrame):
     fig = make_subplots(
         rows=2, cols=1, shared_xaxes=True,
         row_heights=[0.65, 0.35], vertical_spacing=0.06,
-        subplot_titles=["EV Sales + Detected Regimes",
+        subplot_titles=["EV Sales and Model-Assigned Regimes",
                          "Regime Probability (GMM)"],
     )
     # FIX: usar NAVY para linha de vendas — mais visível e distinto da legenda SLATE
@@ -129,13 +129,13 @@ def render(df: pd.DataFrame):
     }), hide_index=True)
 
     st.markdown("---")
-    st.subheader("Candidate Structural Breaks")
+    st.subheader("Candidate Structural-Break Signals")
     cp     = BayesianChangePoint()
     cp_pts = cp.detect(data["ev_sales"].values)
 
     if cp_pts:
         cp_years = [int(data["year"].values[i]) for i in cp_pts if i < len(data)]
-        st.info(f"Candidate mean shifts: **{', '.join(map(str, cp_years))}**")
+        st.info(f"Candidate mean-shift signals: **{', '.join(map(str, cp_years))}**")
         fig_cp = go.Figure(go.Scatter(
             x=data["year"].values, y=data["ev_sales"].values / 1e3,
             mode="lines+markers", line=dict(color=NAVY, width=2),
@@ -152,4 +152,4 @@ def render(df: pd.DataFrame):
         fig_cp.update_layout(**lay_cp)
         st.plotly_chart(fig_cp, config=chart_config())
     else:
-        st.info("No candidate mean shifts detected.")
+        st.info("No candidate mean-shift signals detected.")

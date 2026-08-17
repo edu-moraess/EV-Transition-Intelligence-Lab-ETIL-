@@ -13,10 +13,10 @@ _SCENARIO_FACTOR = {"base": 1.0,  "optimistic": 1.25,      "pessimistic": 0.75}
 def render(df: pd.DataFrame):
     st.markdown("## Forecast Lab")
     st.markdown(
-        "Point forecasts are misleading. Instead, we use a **Bayesian Gaussian Process** to model "
-        "the trend with uncertainty, then run **2,000 Monte Carlo simulations** to produce "
+        "A single point forecast can hide uncertainty. This page uses a **Bayesian Gaussian Process** to model "
+        "the trend with uncertainty, then runs **2,000 Monte Carlo simulations** to produce "
         "an empirical distribution of possible futures. "
-        "The result is not a single number — it is a scenario-conditioned range of simulated outcomes."
+        "The result is a scenario-conditioned range of simulated outcomes rather than a single estimate."
     )
     st.markdown("---")
 
@@ -59,9 +59,9 @@ def render(df: pd.DataFrame):
     cagr_proj   = ((proj_median / last_hist) ** (1 / horizon) - 1) * 100 if last_hist > 0 else np.nan
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric(f"Projection {yrs_f[-1]}",  f"{proj_median/1e3:,.1f}k units")
-    c2.metric("Projected CAGR",           f"{cagr_proj:.1f}%" if not np.isnan(cagr_proj) else "N/A")
-    c3.metric("P10 / P90",
+    c1.metric(f"Median projection — {yrs_f[-1]}",  f"{proj_median/1e3:,.1f}k units")
+    c2.metric("Projected CAGR (median)",           f"{cagr_proj:.1f}%" if not np.isnan(cagr_proj) else "N/A")
+    c3.metric("P10 / P90 — terminal year",
               f"{float(np.percentile(sims[:,-1],10))/1e3:.0f}k / "
               f"{float(np.percentile(sims[:,-1],90))/1e3:.0f}k")
     c4.metric("Active scenario",          scenario.capitalize())
@@ -102,17 +102,17 @@ def render(df: pd.DataFrame):
     ))
     fig.add_vline(x=int(data["year"].max()), line_dash="dot",
                   line_color=SLATE, line_width=1,
-                  annotation_text="Today",
+                  annotation_text="Last observed year",
                   annotation_font_color=SLATE, annotation_font_size=10)
 
-    lay = base_layout(420, f"GP + Monte Carlo Forecast — {selected} ({scenario})")
+    lay = base_layout(420, f"Gaussian Process + Monte Carlo Forecast — {selected} ({scenario})")
     lay.update({"xaxis": {**lay.get("xaxis", {}), "title": "Year"},
                  "yaxis": {**lay.get("yaxis", {}), "title": "Thousand units"}})
     fig.update_layout(**lay)
     st.plotly_chart(fig, use_container_width=True, config=chart_config())
 
     # ── Terminal distribution ──────────────────────────────────────────────
-    st.markdown(f"#### Terminal Distribution — {yrs_f[-1]}")
+    st.markdown(f"#### Terminal-year distribution — {yrs_f[-1]}")
     final = sims[:, -1] / 1e3
     p5, p25, p50, p75, p95 = np.percentile(final, [5, 25, 50, 75, 95])
 

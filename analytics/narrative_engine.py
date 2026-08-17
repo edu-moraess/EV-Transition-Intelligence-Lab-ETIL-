@@ -111,7 +111,7 @@ class NarrativeEngine:
             elif growth <= _GROWTH_DECLINE_THRESHOLD:
                 bullets.append(
                     f"⚠️ **Growth decelerated to {growth:+.0f}% in {latest_yr}**. "
-                    f"May signal market saturation or policy withdrawal."
+                    f"May reflect market saturation, policy changes or other factors."
                 )
                 anomalies.append(f"Negative growth signal: {growth:.0f}% YoY")
 
@@ -121,13 +121,13 @@ class NarrativeEngine:
             if momentum >= _MOMENTUM_THRESHOLD:
                 bullets.append(
                     f"📈 **Accelerating trend** — 3-year momentum at +{momentum:.1f}pp. "
-                    f"Growth is compounding, not just a one-year event."
+                    f"The growth rate has been accelerating across the recent window."
                 )
-                why_parts.append(f"compounding momentum (+{momentum:.1f}pp over 3 years)")
+                why_parts.append(f"accelerating growth rate (+{momentum:.1f}pp over 3 years)")
             elif momentum <= -_MOMENTUM_THRESHOLD:
                 bullets.append(
                     f"📉 **Decelerating trend** — 3-year momentum at {momentum:.1f}pp. "
-                    f"Growth rate is structurally slowing."
+                    f"The growth rate has been slowing across the recent window."
                 )
                 anomalies.append(f"Negative momentum: {momentum:.1f}pp")
 
@@ -138,20 +138,20 @@ class NarrativeEngine:
             if stock_share < 2:
                 bullets.append(
                     f"🌱 **Very early-stage market** — EV stock share at {stock_share:.1f}%. "
-                    f"The growth ceiling is distant; Bass diffusion says the fastest growth lies ahead."
+                    f"There is substantial room for adoption to expand, although the timing of future growth remains uncertain."
                 )
-                why_parts.append(f"low penetration ({stock_share:.1f}% stock share) = high remaining runway")
+                why_parts.append(f"low penetration ({stock_share:.1f}% stock share) = room for adoption to expand")
             elif stock_share > 25:
                 bullets.append(
                     f"🏁 **Maturing market** — EV stock share at {stock_share:.1f}%. "
-                    f"Early adopter phase complete; growth is naturally moderating."
+                    f"Penetration is high and growth is moderating in the observed series."
                 )
-                why_parts.append(f"high penetration ({stock_share:.1f}% stock share) = natural slowdown")
+                why_parts.append(f"high penetration ({stock_share:.1f}% stock share) = slower observed growth")
 
         if not np.isnan(sales_share):
             bullets.append(
-                f"🔋 **{sales_share:.1f}% of new cars sold in {latest_yr} were electric** "
-                f"({'above' if sales_share > 10 else 'below'} the 10% mass-market threshold)."
+                f"🔋 **{sales_share:.1f}% of new vehicles in the series were electric in {latest_yr}** "
+                f"({'above' if sales_share > 10 else 'below'} the 10% reference level used here)."
             )
 
         # ── 4. Infrastructure gap ────────────────────────────────────────
@@ -185,7 +185,7 @@ class NarrativeEngine:
                 bullets.append(
                     f"🔄 **Regime transition** — {country} moved from "
                     f"**{prev_regime}** to **{current_regime}** in {latest_yr}. "
-                    f"This structural shift changes the forecast dynamics."
+                    f"The regime classification changes the inputs used by the forecast model."
                 )
                 what_parts.append(f"regime transition ({prev_regime} → {current_regime})")
             else:
@@ -202,8 +202,8 @@ class NarrativeEngine:
                     top_drivers = [d["factor"].replace("_"," ").title()
                                    for d in drivers["top_positive"][:2]]
                     bullets.append(
-                        f"🎯 **Key drivers**: {' and '.join(top_drivers)} are the main factors "
-                        f"behind this ranking. Score: {drivers.get('score', 0):.1f}/100."
+                        f"🎯 **Key drivers**: {' and '.join(top_drivers)} make the largest positive contributions "
+                        f"to this score. Score: {drivers.get('score', 0):.1f}/100."
                     )
                     why_parts.extend([d["factor"].replace("_"," ") for d in drivers["top_positive"][:2]])
             except Exception:
@@ -259,15 +259,15 @@ class NarrativeEngine:
                 f"{r['country']} (+{r['growth_rate']:.0f}%)"
                 for _, r in surges.iterrows()
             )
-            bullets.append(f"🚀 **Fastest-growing markets in {latest_yr}**: {names}.")
+            bullets.append(f"🚀 **Markets with the highest observed growth in {latest_yr}**: {names}.")
 
         # Top 3 declines
         declines = df_l[df_l["growth_rate"] <= _GROWTH_DECLINE_THRESHOLD]
         if not declines.empty:
             names = ", ".join(declines.sort_values("growth_rate").head(3)["country"])
             bullets.append(
-                f"⚠️ **Growth deceleration signals**: {names} showed significant YoY declines — "
-                f"potential saturation or policy reversal."
+                f"⚠️ **Growth deceleration signals**: {names} showed significant YoY declines. "
+                f"Possible explanations include market maturity, policy changes or other factors."
             )
             anomalies.extend(declines["country"].tolist())
 
@@ -300,7 +300,7 @@ class NarrativeEngine:
             median_ss = df_l["ev_sales_share"].median()
             bullets.append(
                 f"🔋 **Global median EV sales share: {median_ss:.1f}%** — "
-                f"meaning the median country sold {median_ss:.1f} EVs per 100 new cars in {latest_yr}."
+                f"meaning the median country recorded {median_ss:.1f} electric vehicles per 100 new vehicles in {latest_yr}."
             )
 
         return {

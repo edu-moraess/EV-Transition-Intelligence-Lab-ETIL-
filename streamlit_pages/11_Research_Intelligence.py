@@ -77,7 +77,7 @@ def render(df: pd.DataFrame):
     st.markdown("## Research Intelligence")
     st.markdown(
         "An integrated quantitative research view — factor scores, regime-aware forecasts "
-        "and automated narratives, all derived from the same data pipeline with no manual overrides."
+        "and structured narratives, all derived from the same data pipeline."
     )
     st.caption(
         "Pipeline: IEA data → FeatureEngineer → **FactorEngine** → "
@@ -98,9 +98,9 @@ def render(df: pd.DataFrame):
     with tab1:
         st.markdown("### Multi-Factor EV Transition Score")
         st.markdown(
-            "The **FactorEngine** extends EVQTI from 2 factors to a full multi-dimensional model, "
+            "The **FactorEngine** extends EVQTI from 2 factors to a multi-dimensional model, "
             "combining penetration signal, energy cost pressure, infrastructure gap and macroeconomic "
-            "capacity — all lagged t-1 and calibrated by empirical IC."
+            "capacity, with factor weights calibrated using empirical IC."
         )
 
         with st.spinner("Computing factor scores..."):
@@ -116,7 +116,7 @@ def render(df: pd.DataFrame):
 
         # Factor IC validation
         if not ic_tbl.empty:
-            st.markdown("#### Factor validation — which signals are predictive?")
+            st.markdown("#### Factor validation — how do the signals perform?")
             c1, c2, c3, c4 = st.columns(4)
             for i, (_, row) in enumerate(ic_tbl.head(4).iterrows()):
                 col = [c1, c2, c3, c4][i]
@@ -190,7 +190,7 @@ def render(df: pd.DataFrame):
         st.markdown("### Regime-Aware Probabilistic Forecast")
         st.markdown(
             "The forecast is conditioned on the **current adoption regime** — "
-            "Emerging, Expansion, Acceleration or Maturity — which determines the "
+            "Emerging, Expansion, Acceleration or Maturity — which informs the "
             "Bass diffusion priors and Monte Carlo volatility used in the simulation."
         )
 
@@ -245,19 +245,19 @@ def render(df: pd.DataFrame):
             marker=dict(size=6, color=SLATE),
         ))
 
-        # 95% CI
+        # 95% empirical interval
         fig_f.add_trace(go.Scatter(
             x=pd.concat([bl["year"], bl["year"][::-1]]),
             y=pd.concat([bl["p95"] / 1e3, bl["p5"][::-1] / 1e3]),
             fill="toself", fillcolor="rgba(21,81,209,0.06)",
-            line=dict(color="rgba(0,0,0,0)"), name="95% CI",
+            line=dict(color="rgba(0,0,0,0)"), name="95% empirical interval",
         ))
-        # 80% CI
+        # 80% empirical interval
         fig_f.add_trace(go.Scatter(
             x=pd.concat([bl["year"], bl["year"][::-1]]),
             y=pd.concat([bl["p90"] / 1e3, bl["p10"][::-1] / 1e3]),
             fill="toself", fillcolor="rgba(21,81,209,0.12)",
-            line=dict(color="rgba(0,0,0,0)"), name="80% CI",
+            line=dict(color="rgba(0,0,0,0)"), name="80% empirical interval",
         ))
         # Median
         fig_f.add_trace(go.Scatter(
@@ -282,7 +282,7 @@ def render(df: pd.DataFrame):
 
         fig_f.add_vline(x=int(hist["year"].max()), line_dash="dot",
                          line_color=SLATE, line_width=1,
-                         annotation_text="Today", annotation_font_size=9)
+                         annotation_text="Last observed year", annotation_font_size=9)
 
         lay_f = base_layout(420, f"Regime-Aware Forecast — {fc_country} ({regime})")
         lay_f.update({"xaxis": {**lay_f.get("xaxis",{}), "title": "Year"},
@@ -303,11 +303,10 @@ def render(df: pd.DataFrame):
     # TAB 3 — RESEARCH NARRATIVES
     # ════════════════════════════════════════════════════════════════════════
     with tab3:
-        st.markdown("### Automated Research Narratives")
+        st.markdown("### Structured Research Narratives")
         st.markdown(
             "Quantitative insights translated into structured research bullets. "
-            "Every bullet is derived from a specific quantitative condition — "
-            "no LLM hallucination, no generic text."
+            "Each bullet is generated from a predefined quantitative condition; the output is descriptive and does not replace analyst judgment."
         )
 
         col_mode, _ = st.columns([2, 3])

@@ -17,17 +17,17 @@ def render(df: pd.DataFrame):
     st.markdown("## EVQTI Ranking")
     st.markdown(
         "The **EV Quant Transition Index** answers a specific question: "
-        "*which countries are most likely to see the fastest EV growth over the next year?*"
+        "*which countries show the strongest early-stage signal associated with above-average EV growth in the next year?*"
     )
     st.markdown(
         "The answer is counterintuitive. Norway and the Netherlands — global EV leaders — "
-        "rank low on EVQTI because their markets are maturing. Countries like Brazil, "
-        "Indonesia and South Africa rank high because they have low penetration today "
-        "but are already accelerating. **Early-stage markets grow faster — that's Bass diffusion law.**"
+        "rank lower on EVQTI because their markets are more mature. Countries like Brazil, "
+        "Indonesia and South Africa rank higher because they have low penetration today "
+        "and stronger recent momentum. **Early-stage markets can show faster growth during diffusion.**"
     )
     st.caption(
         f"Dataset: {dataset} · Signal built at t-1 · "
-        f"Features: EV stock share · EV sales share · Target: EV growth at t+1"
+        f"Features: EV stock share · EV sales share · Outcome evaluated: EV growth at t+1"
     )
     st.markdown("---")
 
@@ -45,25 +45,24 @@ def render(df: pd.DataFrame):
             return
 
     # ── What the numbers mean ─────────────────────────────────────────────────
-    st.markdown("### Does the signal actually work?")
+    st.markdown("### How does the signal perform in validation?")
     st.markdown(
-        "A factor is only useful if it predicts what it claims to predict. "
         "Here we measure the **Information Coefficient (IC)** — "
-        "the correlation between the EVQTI score in year *t* and actual EV growth in year *t+1*. "
-        "An IC above 0.10 is considered a robust signal in quantitative research."
+        "the correlation between the EVQTI score in year *t* and observed EV growth in year *t+1*. "
+        "An IC above 0.10 is used here as a reference threshold; interpretation also depends on sample size and stability."
     )
 
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Mean Rank IC", f"{s.get('ic_mean', 0):+.3f}",
-              help="Spearman correlation between EVQTI(t-1) and EV growth(t+1). Threshold: |IC| > 0.10.")
+              help="Spearman correlation between EVQTI(t-1) and EV growth(t+1). Reference threshold: |IC| > 0.10.")
     c2.metric("Information Ratio", f"{s.get('ir', 0):.2f}",
-              help="IC mean divided by IC standard deviation. IR > 0.5 = consistent signal.")
+              help="IC mean divided by IC standard deviation. IR above 0.5 is a reference for consistency, not a guarantee of performance.")
     c3.metric("Years with positive IC", f"{s.get('pct_positive', 0):.0f}%",
               help="Proportion of years where the signal was in the right direction.")
-    c4.metric("Years statistically significant", f"{s.get('pct_sig', 0):.0f}%",
+    c4.metric("Years with significant IC", f"{s.get('pct_sig', 0):.0f}%",
               help="Years where IC was significant at p < 0.05.")
     c5.metric("Growth spread Q5 vs Q1", f"{s.get('spread_q5_q1', 0):.0f}pp",
-              help="Countries in the top quintile grew this many percentage points faster than the bottom quintile.")
+              help="Difference in average next-year growth between the highest (Q5) and lowest (Q1) EVQTI quintiles.")
 
     st.markdown("---")
 
@@ -73,7 +72,7 @@ def render(df: pd.DataFrame):
         st.markdown("##### IC by year — does the signal hold over time?")
         st.caption(
             "Each bar is the correlation between EVQTI and next-year growth for that year. "
-            "The signal strengthens after 2020 as EV markets gained enough scale."
+            "The chart shows how the relationship varies over time; it does not by itself establish a structural improvement."
         )
         if not ic_df.empty:
             fig_ic = go.Figure()
@@ -87,7 +86,7 @@ def render(df: pd.DataFrame):
             ))
             fig_ic.add_hline(y=0.10, line_dash="dot",
                              line_color="rgba(128,128,128,0.4)", line_width=1,
-                             annotation_text="Robust threshold (0.10)",
+                             annotation_text="Reference threshold (0.10)",
                              annotation_font_size=9)
             lay = base_layout(300)
             lay.update({"yaxis": {**lay.get("yaxis",{}), "title": "Rank IC", "range": [-0.40, 0.60]},
@@ -96,11 +95,10 @@ def render(df: pd.DataFrame):
             st.plotly_chart(fig_ic, config=chart_config())
 
     with col_b:
-        st.markdown("##### Do high-EVQTI countries actually grow faster?")
+        st.markdown("##### How do growth rates vary across EVQTI groups?")
         st.caption(
-            "Countries ranked in the top quintile (Q5) by EVQTI grew significantly faster "
-            "the following year than those in the bottom quintile (Q1). "
-            "A monotonically increasing chart confirms the factor is valid."
+            "This chart compares average next-year growth across EVQTI quintiles, from the lowest (Q1) to the highest (Q5). "
+            "The spread and error bars show how the relationship varies in the validation sample; the chart is evidence for evaluation, not proof that the factor is universally valid."
         )
         if not dec.empty:
             fig_dec = go.Figure(go.Bar(
@@ -126,7 +124,8 @@ def render(df: pd.DataFrame):
         "A factor that worked once can simply be luck. To check, we measure the IC "
         "in rolling test windows — without re-fitting the weights each time. "
         "This shows whether the **same, fixed factor** keeps working as new years arrive, "
-        "which is a more honest test than re-optimising weights for every period."
+        "which helps assess stability without changing the factor definition in each period."
+
     )
     try:
         from models.scoring.evqti import EVQTI as _EVQTIClass
@@ -145,7 +144,7 @@ def render(df: pd.DataFrame):
             ))
             fig_bt.add_hline(y=0.10, line_dash="dot",
                              line_color="rgba(128,128,128,0.4)", line_width=1,
-                             annotation_text="Robust threshold (0.10)",
+                             annotation_text="Reference threshold (0.10)",
                              annotation_font_size=9)
             lay_bt = base_layout(280, "Out-of-sample IC by test year (fixed weights)")
             lay_bt.update({"yaxis": {**lay_bt.get("yaxis",{}), "title": "IC (test year)"},
@@ -159,8 +158,7 @@ def render(df: pd.DataFrame):
             st.caption(
                 f"The signal has **{trend}** over time: average IC was {early_ic:+.3f} "
                 f"in the earliest test years vs {recent_ic:+.3f} in the most recent ones. "
-                f"This is consistent with EV markets gaining enough scale for the cross-country "
-                f"signal to become statistically reliable."
+                f"This suggests, but does not prove, that the cross-country relationship may be more stable in later years."
             )
         else:
             st.info("Not enough historical years available for a rolling backtest.")
@@ -170,10 +168,10 @@ def render(df: pd.DataFrame):
     st.markdown("---")
 
     # ── Ranking ────────────────────────────────────────────────────────────────
-    st.markdown("### Country ranking — where is opportunity concentrated?")
+    st.markdown("### Country ranking — where is the early-stage signal strongest?")
     st.markdown(
-        "Higher score = stronger early-stage signal = more likely to see above-average growth next year. "
-        "This is not a quality ranking — a high score means the market is early, not that it is better."
+        "Higher score = stronger early-stage signal associated with higher next-year growth in the validation sample. "
+        "This is not a quality or investment ranking — a high score means the market appears earlier-stage, not that it is better."
     )
     n_show = st.slider("Countries to display", 10, len(rdf), min(30, len(rdf)))
     # FIX: Garante ordenação decrescente antes de pegar o head()
@@ -204,7 +202,7 @@ def render(df: pd.DataFrame):
     st.caption(
         "Each bubble is a country. X-axis = EVQTI (early-stage signal). "
         "Y-axis = historical CAGR. Bubble size = current EV sales volume. "
-        "Top-right: large early-stage markets with strong growth — highest potential."
+        "Top-right: large early-stage markets with strong historical growth in this view."
     )
     df_l    = df[df["year"] == df["year"].max()]
     df_meta = df_l.groupby("country").agg(
@@ -246,8 +244,8 @@ def render(df: pd.DataFrame):
 
     with st.expander("How is EVQTI calculated?"):
         st.markdown("""
-**The logic:** Countries with low EV penetration today but positive momentum are in the early
-phase of the Bass diffusion curve — where growth is fastest. EVQTI scores these countries higher.
+**The logic:** Countries with low EV penetration today but positive momentum are treated as earlier-stage
+markets in the diffusion framework, where growth may accelerate. EVQTI scores these countries higher.
 
 **The maths:**
 
@@ -256,7 +254,7 @@ phase of the Bass diffusion curve — where growth is fastest. EVQTI scores thes
 | EV stock share (t-1) | Negative — lower share = earlier stage | 48.5% | −0.259 (p<0.001) |
 | EV sales share (t-1) | Negative — lower share = earlier stage | 51.5% | −0.275 (p<0.001) |
 
-Growth rate was tested and excluded: IC = −0.037, p = 0.36 — no predictive power cross-country.
+Growth rate was tested and excluded: IC = −0.037, p = 0.36 — it did not show predictive power in this cross-country test sample.
 
 **Steps:**
 1. Winsorise features at 1%–99% to remove outliers

@@ -12,10 +12,10 @@ _COLORS = {"Bass": NAVY, "Logistic": GREEN_DARK, "Gompertz": AMBER}
 def render(df: pd.DataFrame):
     st.markdown("## Diffusion Engine")
     st.markdown(
-        "Technology adoption follows S-shaped curves — slow at first, then explosive, then plateauing. "
-        "Three models capture this: **Bass** models innovation vs imitation; "
+        "Technology adoption can often be represented by S-shaped curves — slower at first, faster during expansion, and more gradual as the market matures. "
+        "Three models represent different shapes: **Bass** models innovation and imitation; "
         "**Logistic** fits a symmetric S-curve; **Gompertz** allows for asymmetric, slower early growth. "
-        "Fit them to any country and project where the market is heading."
+        "Fit them to a country to compare the observed series with model-based extrapolations."
     )
     st.markdown("---")
 
@@ -145,9 +145,9 @@ def render(df: pd.DataFrame):
     st.markdown("---")
     st.markdown("### Multi-Country Comparison — Where is each country on the S-curve?")
     st.markdown(
-        "Overlaying Bass curves across countries reveals who is ahead, who is catching up, "
-        "and how much runway remains. The **normalised view** (% of market ceiling) "
-        "removes the size advantage of large countries and shows adoption stage directly."
+        "Overlaying Bass curves across countries helps compare observed adoption levels and model-based trajectories. "
+        "The **normalised view** (% of fitted market ceiling) removes the size advantage of large countries "
+        "and shows each market’s position relative to its fitted ceiling."
     )
     compare = st.multiselect(
         "Add countries to compare",
@@ -199,9 +199,9 @@ def render(df: pd.DataFrame):
 
     with tab_norm:
         st.caption(
-            "Normalised to % of fitted market ceiling (M). "
-            "This removes scale and shows how far along the adoption curve each country is — "
-            "0% = no EVs, 100% = full saturation."
+            "Normalised to % of the fitted market ceiling (M). "
+            "This removes scale and shows each country’s position on its modelled adoption curve — "
+            "0% = no cumulative EV sales in the fitted series, 100% = the fitted ceiling."
         )
         fig_norm = go.Figure()
         for ci, ctry in enumerate(all_compare):
@@ -221,9 +221,9 @@ def render(df: pd.DataFrame):
                 current_pct = S_c[-1] / M_c * 100
                 fig_norm.add_trace(go.Scatter(
                     x=y_ext, y=pct, mode="lines",
-                    name=f"{ctry} ({current_pct:.0f}% adopted)",
+                    name=f"{ctry} ({current_pct:.0f}% of fitted ceiling)",
                     line=dict(color=col, width=2.5),
-                    hovertemplate=f"{ctry} · %{{x}}: %{{y:.1f}}% of ceiling<extra></extra>",
+                    hovertemplate=f"{ctry} · %{{x}}: %{{y:.1f}}% of fitted ceiling<extra></extra>",
                 ))
                 # annotate current position
                 fig_norm.add_trace(go.Scatter(
@@ -242,7 +242,7 @@ def render(df: pd.DataFrame):
                             annotation_text="Today", annotation_font_size=9)
         fig_norm.add_hline(y=50, line_dash="dot",
                             line_color="rgba(128,128,128,0.4)", line_width=1,
-                            annotation_text="50% saturation", annotation_font_size=9)
+                            annotation_text="50% of fitted ceiling", annotation_font_size=9)
         lay_n = base_layout(400, "Adoption Stage — % of Fitted Market Ceiling")
         lay_n.update({"xaxis": {**lay_n.get("xaxis",{}), "title": "Year"},
                        "yaxis": {**lay_n.get("yaxis",{}), "title": "% of market ceiling",

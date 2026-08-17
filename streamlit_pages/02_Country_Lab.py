@@ -18,16 +18,16 @@ _REGIME_COLORS = {0: SLATE, 1: NAVY_LIGHT, 2: GREEN_MED, 3: AMBER}
 _REGIME_LABELS = {0: "Emerging", 1: "Expansion", 2: "Acceleration", 3: "Maturity"}
 
 _REGIME_EXPLAINER = {
-    "Emerging":      "Early market — EV adoption is beginning. Policy and awareness are key.",
-    "Expansion":     "Growing market — early adopters driving volume. Infrastructure expanding.",
-    "Acceleration":  "Mass-market phase — mainstream buyers entering. Growth is rapid.",
-    "Maturity":      "Mature market — high penetration. Growth is slowing naturally.",
+    "Emerging":      "Early-stage market — adoption is beginning. Policy and awareness can influence the pace.",
+    "Expansion":     "Growing market — early adopters are driving volume and infrastructure is expanding.",
+    "Acceleration":  "Mass-market phase — mainstream buyers are entering and growth is rapid.",
+    "Maturity":      "Mature market — penetration is high and growth is moderating.",
 }
 
 
 def render(df: pd.DataFrame):
     st.markdown("## Country Lab")
-    st.markdown("Deep-dive into any country's EV transition — history, trajectory, fuel context and regime.")
+    st.markdown("Explore a country’s EV transition through its historical data, trajectory, fuel-price context and adoption regime.")
     st.markdown("---")
 
     countries = sorted(df["country"].unique())
@@ -54,14 +54,14 @@ def render(df: pd.DataFrame):
               f"{gr:.1f}%" if not np.isnan(gr) else "N/A",
               delta=f"{gr:.1f}%" if not np.isnan(gr) else None,
               help="Change in EV sales vs the previous year.")
-    c3.metric("CAGR (all years)",
+    c3.metric("CAGR (full history)",
               f"{cagr:.1f}%" if not np.isnan(cagr) else "N/A",
-              help="Compound annual growth rate since the first data point.")
+              help="Compound annual growth rate over the available history.")
     if "ev_stock_share" in data.columns and data["ev_stock_share"].notna().any():
         latest_share = data["ev_stock_share"].dropna().iloc[-1]
         c4.metric("EV stock share",
                   f"{latest_share:.1f}%",
-                  help="Share of EVs in the total vehicle fleet (most recent year).")
+                  help="Share of EVs in the corresponding vehicle fleet in the most recent year.")
     else:
         c4.metric("EV stock share", "N/A")
 
@@ -80,11 +80,11 @@ def render(df: pd.DataFrame):
             f3.metric("Gasoline YoY change",
                       f"{fs['gasoline_yoy_pct']:+.1f}%" if fs["gasoline_yoy_pct"] is not None else "N/A",
                       delta=f"{fs['gasoline_yoy_pct']:+.1f}%" if fs["gasoline_yoy_pct"] is not None else None,
-                      help="Year-on-year change in gasoline price. Rising prices strengthen the case for EVs.")
+                      help="Year-on-year change in gasoline price. Rising prices can strengthen the economic case for EVs.")
             f4.metric("Fuel price volatility",
                       f"{fs['fuel_volatility']:.1f}%" if fs["fuel_volatility"] is not None else "N/A",
                       help="Annualised std dev of monthly gasoline returns (last 12m). "
-                           "High volatility increases the attractiveness of EVs as a stable-cost alternative.")
+                           "High volatility can make EVs a more stable-cost alternative.")
 
     # ── Country fundamentals (World Bank) ──────────────────────────────────────
     fundamentals = get_country_fundamentals(selected)
@@ -101,7 +101,7 @@ def render(df: pd.DataFrame):
             wb1.metric("GDP per capita",
                        f"${fundamentals['gdp_per_capita']:,.0f}",
                        help=f"World Bank, {fundamentals.get('gdp_per_capita_year','')}. "
-                            "Higher income generally supports faster EV adoption.")
+                            "Higher income is generally associated with greater capacity to adopt EVs.")
         if "population" in fundamentals:
             pop = fundamentals["population"]
             pop_label = f"{pop/1e6:.1f}M" if pop >= 1e6 else f"{pop:,.0f}"
@@ -111,7 +111,7 @@ def render(df: pd.DataFrame):
             wb3.metric("Urbanization",
                        f"{fundamentals['urbanization']:.0f}%",
                        help=f"World Bank, {fundamentals.get('urbanization_year','')}. "
-                            "Urban populations have shorter commutes and more charging access.")
+                            "Urbanisation affects travel patterns, housing and access to charging.")
         if "gdp_growth" in fundamentals:
             wb4.metric("GDP growth",
                        f"{fundamentals['gdp_growth']:+.1f}%",
@@ -161,8 +161,8 @@ def render(df: pd.DataFrame):
         if "ev_stock_share" in data.columns and data["ev_stock_share"].notna().any():
             world_avg_stock = df[df["year"] == latest_yr]["ev_stock_share"].mean() if "ev_stock_share" in df.columns else None
             st.markdown(
-                "**EV stock share** — % of the total vehicle fleet that is electric. "
-                "Rises slowly as it takes years for the fleet to turn over."
+                "**EV stock share** — percentage of the corresponding vehicle fleet that is electric. "
+                "It usually changes more slowly because fleet turnover takes years."
             )
             fig3 = go.Figure()
             fig3.add_trace(go.Scatter(
@@ -188,8 +188,8 @@ def render(df: pd.DataFrame):
         if "ev_sales_share" in data.columns and data["ev_sales_share"].notna().any():
             world_avg_sales_share = df[df["year"] == latest_yr]["ev_sales_share"].mean() if "ev_sales_share" in df.columns else None
             st.markdown(
-                "**EV sales share** — of every 100 **new cars** sold this year, how many are electric? "
-                "This is the most actionable metric for tracking the transition speed."
+                "**EV sales share** — percentage of **new vehicles in the selected mode** that are electric. "
+                "This is a useful indicator for tracking the speed of the transition."
             )
             fig_ss = go.Figure()
             fig_ss.add_trace(go.Scatter(
@@ -251,8 +251,8 @@ def render(df: pd.DataFrame):
     if has_fuel:
         st.markdown("### Fuel price context")
         st.markdown(
-            "Higher and more volatile gasoline prices strengthen the economic case for switching to EVs. "
-            "The chart below overlays monthly fuel prices with annual EV sales."
+            "Higher and more volatile gasoline prices can strengthen the economic case for switching to EVs. "
+            "The chart below compares monthly fuel prices with annual EV sales."
         )
         monthly = get_monthly_fuel(selected)
         if not monthly.empty:
@@ -311,7 +311,7 @@ def render(df: pd.DataFrame):
                     f"{color_txt} Gasoline in **{selected}** is **{direction}** "
                     f"{abs(fs['gasoline_yoy_pct']):.1f}% year-on-year "
                     f"(latest: ${fs['gasoline_latest']:.2f}/L, {fs['latest_date']}). "
-                    f"{'Rising fuel costs increase the economic incentive to switch to EVs.' if direction == 'up' else 'Falling fuel prices reduce short-term financial pressure to adopt EVs.'}"
+                    f"{'Rising fuel costs can increase the economic incentive to switch to EVs.' if direction == 'up' else 'Falling fuel prices can reduce short-term financial pressure to adopt EVs.'}"
                 )
     else:
         st.caption(
@@ -324,7 +324,7 @@ def render(df: pd.DataFrame):
     # ── Diffusion models ──────────────────────────────────────────────────────
     st.markdown("### Diffusion models — where is this market in the adoption curve?")
     st.markdown(
-        "Technology adoption follows predictable S-shaped curves. "
+        "Technology adoption can often be represented by S-shaped curves. "
         "Three models are fitted here: **Bass** (innovation + imitation dynamics), "
         "**Logistic** (symmetric S-curve) and **Gompertz** (asymmetric, slower early growth). "
         "The best-fitting model (lowest AIC) is highlighted."
@@ -392,8 +392,8 @@ def render(df: pd.DataFrame):
     st.markdown("### Adoption regime — what stage is this market in?")
     st.markdown(
         "Markets go through distinct phases of EV adoption. "
-        "A Gaussian Mixture Model identifies which phase each year belongs to based on "
-        "EV stock share and growth rate patterns."
+        "A Gaussian Mixture Model assigns each year to a model regime based on "
+        "EV stock share and growth-rate patterns."
     )
 
     with st.spinner("Detecting regimes..."):
