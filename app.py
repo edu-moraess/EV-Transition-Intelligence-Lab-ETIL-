@@ -190,7 +190,6 @@ def _sidebar() -> tuple[str | None, str | None, str]:
         "style='color:inherit; text-decoration:underline;'>LinkedIn</a> · "
         "<a href='https://github.com/edu-moraess' "
         "style='color:inherit; text-decoration:underline;'>GitHub</a><br><br>"
-        "<span style='opacity:0.6;'>v2.0 · Advanced Quant Suite</span>"
         "</div>",
         unsafe_allow_html=True
     )
