@@ -33,8 +33,8 @@ logger = setup_logger(__name__)
 # Thresholds for insight generation
 _REGIME_CHANGE_LOOKBACK   = 3   # years to look back for regime change detection
 _SCORE_SHIFT_THRESHOLD    = 10  # ETII/EVQTI rank shift considered significant
-_INFRA_GAP_THRESHOLD      = 20  # EVs/charger above this = infrastructure concern
-_INFRA_TARGET             = 10  # IEA reference target
+_INFRA_GAP_THRESHOLD      = 20  # EVs per public charging point above this = infrastructure concern
+_INFRA_TARGET             = 10  # Study reference level
 _MOMENTUM_THRESHOLD       = 10  # pp momentum change considered significant
 _GROWTH_SURGE_THRESHOLD   = 50  # % YoY growth above this = surge
 _GROWTH_DECLINE_THRESHOLD =-20  # % YoY growth below this = decline signal
@@ -164,15 +164,15 @@ class NarrativeEngine:
         if not np.isnan(ev_per_charger) and ev_per_charger > 0:
             if ev_per_charger > _INFRA_GAP_THRESHOLD:
                 bullets.append(
-                    f"⚡ **Infrastructure bottleneck** — {ev_per_charger:.0f} EVs per public charger "
-                    f"(IEA target: {_INFRA_TARGET}). Charging network is not keeping pace with sales growth."
+                    f"⚡ **Infrastructure bottleneck** — {ev_per_charger:.0f} EVs per public charging point "
+                    f"(study reference level: {_INFRA_TARGET}). Public charging coverage is not keeping pace with the EV fleet."
                 )
-                anomalies.append(f"Infrastructure gap: {ev_per_charger:.0f} EVs/charger (target: {_INFRA_TARGET})")
-                why_parts.append(f"infrastructure constraint ({ev_per_charger:.0f} EVs/charger)")
+                anomalies.append(f"Infrastructure gap: {ev_per_charger:.0f} EVs per public charging point (reference level: {_INFRA_TARGET})")
+                why_parts.append(f"infrastructure constraint ({ev_per_charger:.0f} EVs per public charging point)")
             elif ev_per_charger <= _INFRA_TARGET:
                 bullets.append(
-                    f"✅ **Well-covered charging network** — {ev_per_charger:.0f} EVs per charger, "
-                    f"at or below the IEA reference target of {_INFRA_TARGET}."
+                    f"✅ **Well-covered charging network** — {ev_per_charger:.0f} EVs per public charging point, "
+                    f"at or below the study reference level of {_INFRA_TARGET}."
                 )
 
         # ── 5. Regime ────────────────────────────────────────────────────
@@ -278,7 +278,7 @@ class NarrativeEngine:
             ].sort_values("ev_per_charger", ascending=False).head(3)
             if not infra_alarm.empty:
                 names = ", ".join(
-                    f"{r['country']} ({r['ev_per_charger']:.0f} EVs/charger)"
+                    f"{r['country']} ({r['ev_per_charger']:.0f} EVs per public charging point)"
                     for _, r in infra_alarm.iterrows()
                 )
                 bullets.append(

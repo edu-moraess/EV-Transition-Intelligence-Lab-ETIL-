@@ -43,12 +43,12 @@ def render(df: pd.DataFrame):
 
     st.markdown("## Infrastructure Intelligence")
     st.markdown(
-        "A country can have the best EV policy in the world — but without enough "
-        "charging points, adoption stalls. This page tracks the infrastructure "
-        "build-out: how many chargers, how fast they're growing, and whether "
-        "the network is keeping pace with the vehicle fleet."
+        "A country can have strong EV policy, but limited charging access can slow "
+        "adoption. This page tracks the infrastructure build-out: how many public "
+        "charging points exist, how quickly the network is growing, and how the "
+        "network compares with the size of the EV fleet."
     )
-    st.caption(f"Source: IEA Global EV Outlook {year_int} · Public charging points only")
+    st.caption(f"Source: IEA Global EV Outlook {year_int} · Public charging points; EVs per public charging point use the study’s defined EV fleet.")
     st.markdown("---")
 
     with st.spinner("Loading infrastructure data..."):
@@ -80,15 +80,15 @@ def render(df: pd.DataFrame):
     median_epc = epc_l["ev_per_charger"].median() if not epc_l.empty else None
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric(f"Public chargers — {latest_year}",
+    c1.metric(f"Public charging points — {latest_year}",
               f"{total_cp/1e6:.2f}M",
               f"{yoy_cp:+.1f}% vs {prev_year}",
               help="Total publicly available charging points across all tracked countries.")
     c2.metric("Countries tracked", str(n_ctries),
               help="Countries with IEA charging point data.")
-    c3.metric("Median EVs per charger",
+    c3.metric("Median EVs per public charging point",
               f"{median_epc:.0f}" if median_epc else "N/A",
-              help="Lower = better coverage. IEA target is ~10 EVs per public charger.")
+              help="Lower = greater coverage relative to fleet size. This study uses a reference level of ~10 EVs per public charging point.")
     # Fastest growing infra country
     merged = cp_l.merge(cp_p[["country","charging_points"]], on="country", how="inner",
                         suffixes=("","_prev"))
@@ -96,16 +96,16 @@ def render(df: pd.DataFrame):
         merged["cp_yoy"] = (merged["charging_points"] - merged["charging_points_prev"]) / \
                             merged["charging_points_prev"] * 100
         top_infra = merged.nlargest(1, "cp_yoy").iloc[0]
-        c4.metric("Fastest-growing network",
+        c4.metric("Fastest-growing public charging network",
                   top_infra["country"],
-                  f"+{top_infra['cp_yoy']:.0f}% chargers YoY")
+                  f"+{top_infra['cp_yoy']:.0f}% public charging points YoY")
 
     st.markdown("---")
 
     # ── Top 15 countries by total chargers ────────────────────────────────────
     col_l, col_r = st.columns(2)
     with col_l:
-        st.markdown("### Who has the most chargers?")
+        st.markdown("### Who has the most public charging points?")
         st.caption(f"Total public charging points — {latest_year}")
         top15 = cp_l.nlargest(15, "charging_points").sort_values("charging_points")
         norm  = (top15["charging_points"] - top15["charging_points"].min()) / \
@@ -117,20 +117,20 @@ def render(df: pd.DataFrame):
                         showscale=False),
             text=top15["charging_points"].map(lambda v: f"{v/1e3:.0f}k"),
             textposition="outside", textfont=dict(size=9),
-            hovertemplate="%{y}: %{x:.1f}k chargers<extra></extra>",
+            hovertemplate="%{y}: %{x:.1f}k public charging points<extra></extra>",
         ))
         lay1 = base_layout(380)
-        lay1.update({"xaxis": {**lay1.get("xaxis",{}), "title": "Thousand chargers"},
+        lay1.update({"xaxis": {**lay1.get("xaxis",{}), "title": "Thousand public charging points"},
                       "yaxis": {**lay1.get("yaxis",{}), "title": ""},
                       "showlegend": False, "margin": {**lay1.get("margin",{}), "r": 60}})
         fig1.update_layout(**lay1)
         st.plotly_chart(fig1, config=chart_config())
 
     with col_r:
-        st.markdown("### Who has the most chargers per EV?")
+        st.markdown("### Who has the fewest EVs per public charging point?")
         st.caption(
-            f"EVs per public charger — {latest_year}  \n"
-            "Lower = better infrastructure coverage relative to fleet size"
+            f"EVs per public charging point — {latest_year}  \n"
+            "Lower = fewer EVs per public charging point; this indicates greater coverage relative to fleet size"
         )
         epc_top = epc_l.nsmallest(15, "ev_per_charger").sort_values("ev_per_charger", ascending=False)
         fig2 = go.Figure(go.Bar(
@@ -140,12 +140,12 @@ def render(df: pd.DataFrame):
                           for v in epc_top["ev_per_charger"]],
             text=epc_top["ev_per_charger"].map(lambda v: f"{v:.0f}"),
             textposition="outside", textfont=dict(size=9),
-            hovertemplate="%{y}: %{x:.0f} EVs per charger<extra></extra>",
+            hovertemplate="%{y}: %{x:.0f} EVs per public charging point<extra></extra>",
         ))
         fig2.add_vline(x=10, line_dash="dot", line_color=GREEN_MED, line_width=1.5,
-                       annotation_text="IEA target (10)", annotation_font_size=9)
+                       annotation_text="Reference level (10)", annotation_font_size=9)
         lay2 = base_layout(380)
-        lay2.update({"xaxis": {**lay2.get("xaxis",{}), "title": "EVs per charger (lower = better)"},
+        lay2.update({"xaxis": {**lay2.get("xaxis",{}), "title": "EVs per public charging point (lower = more coverage)"},
                       "yaxis": {**lay2.get("yaxis",{}), "title": ""},
                       "showlegend": False, "margin": {**lay2.get("margin",{}), "r": 60}})
         fig2.update_layout(**lay2)
@@ -154,11 +154,11 @@ def render(df: pd.DataFrame):
     st.markdown("---")
 
     # ── Charger growth trend — global ─────────────────────────────────────────
-    st.markdown("### How fast is the global charging network growing?")
+    st.markdown("### How quickly is the global public charging network expanding?")
     st.markdown(
-        "The number of public chargers needs to grow at least as fast as EV sales "
+        "Public charging capacity and accessibility need to keep pace with EV demand "
         "to avoid infrastructure bottlenecks. The chart below shows annual growth "
-        "in total public charging points across all tracked countries."
+        "in the total number of public charging points across all tracked countries."
     )
     cp_global = cp.groupby("year")["charging_points"].sum().reset_index()
     cp_global["yoy"] = cp_global["charging_points"].pct_change() * 100
@@ -166,8 +166,8 @@ def render(df: pd.DataFrame):
     fig3 = go.Figure()
     fig3.add_trace(go.Bar(
         x=cp_global["year"], y=cp_global["charging_points"] / 1e6,
-        name="Total chargers (M)", marker_color=NAVY, opacity=0.85,
-        hovertemplate="Year %{x}: %{y:.2f}M chargers<extra></extra>",
+        name="Total public charging points (M)", marker_color=NAVY, opacity=0.85,
+        hovertemplate="Year %{x}: %{y:.2f}M public charging points<extra></extra>",
     ))
     fig3.add_trace(go.Scatter(
         x=cp_global["year"], y=cp_global["yoy"],
@@ -179,7 +179,7 @@ def render(df: pd.DataFrame):
     ))
     lay3 = base_layout(340)
     lay3.update({
-        "yaxis":  dict(title="Million chargers", gridcolor="rgba(128,128,128,0.12)"),
+        "yaxis":  dict(title="Million public charging points", gridcolor="rgba(128,128,128,0.12)"),
         "yaxis2": dict(title="YoY growth (%)", overlaying="y", side="right", showgrid=False),
         "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
                        bgcolor="rgba(0,0,0,0)"),
@@ -205,21 +205,21 @@ def render(df: pd.DataFrame):
         col_a, col_b = st.columns(2)
 
         with col_a:
-            st.markdown(f"##### Total charging points — {selected}")
+            st.markdown(f"##### Total public charging points — {selected}")
             fig4 = go.Figure(go.Bar(
                 x=cp_c["year"], y=cp_c["charging_points"] / 1e3,
                 marker_color=NAVY, opacity=0.85,
-                hovertemplate="%{x}: %{y:.1f}k chargers<extra></extra>",
+                hovertemplate="%{x}: %{y:.1f}k public charging points<extra></extra>",
             ))
             lay4 = base_layout(260)
-            lay4.update({"yaxis": {**lay4.get("yaxis",{}), "title": "Thousand chargers"},
+            lay4.update({"yaxis": {**lay4.get("yaxis",{}), "title": "Thousand public charging points"},
                           "showlegend": False})
             fig4.update_layout(**lay4)
             st.plotly_chart(fig4, config=chart_config())
 
         with col_b:
-            st.markdown(f"##### EVs per charger — {selected}")
-            st.caption("Lower is better — less pressure on each charger")
+            st.markdown(f"##### EVs per public charging point — {selected}")
+            st.caption("Lower means fewer EVs per public charging point and greater coverage relative to fleet size.")
             if not epc_c.empty:
                 fig5 = go.Figure(go.Scatter(
                     x=epc_c["year"], y=epc_c["ev_per_charger"],
@@ -227,19 +227,19 @@ def render(df: pd.DataFrame):
                     line=dict(color=AMBER, width=2.5),
                     marker=dict(size=7, color=AMBER),
                     fill="tozeroy", fillcolor="rgba(245,158,11,0.08)",
-                    hovertemplate="%{x}: %{y:.0f} EVs/charger<extra></extra>",
+                    hovertemplate="%{x}: %{y:.0f} EVs per public charging point<extra></extra>",
                 ))
                 fig5.add_hline(y=10, line_dash="dot", line_color=GREEN_MED, line_width=1.5,
-                               annotation_text="IEA target", annotation_font_size=9)
+                               annotation_text="Reference level", annotation_font_size=9)
                 lay5 = base_layout(260)
-                lay5.update({"yaxis": {**lay5.get("yaxis",{}), "title": "EVs per charger"},
+                lay5.update({"yaxis": {**lay5.get("yaxis",{}), "title": "EVs per public charging point"},
                               "showlegend": False})
                 fig5.update_layout(**lay5)
                 st.plotly_chart(fig5, config=chart_config())
 
         if not ct_c.empty:
-            st.markdown(f"##### Charger mix by type — {selected}")
-            st.caption("Fast chargers reduce range anxiety; ultra-fast enable highway corridors")
+            st.markdown(f"##### Public charging-point mix by type — {selected}")
+            st.caption("Fast and ultra-fast chargers support longer-distance travel and reduce charging time.")
             types = ct_c["charger_type"].unique()
             fig6 = go.Figure()
             for t in types:
@@ -272,15 +272,15 @@ def render(df: pd.DataFrame):
         if len(merged_c) >= 4:
             st.markdown(f"##### Infrastructure vs EV sales — {selected}")
             st.caption(
-                "If chargers grow slower than EV sales, the network falls behind. "
-                "If charger growth leads EV sales, the country is building ahead of demand."
+                "If public charging points grow slower than EV demand, relative coverage may deteriorate. "
+                "If the network expands faster, coverage may improve."
             )
             merged_c["cp_norm"] = merged_c["charging_points"] / merged_c["charging_points"].iloc[0]
             merged_c["ev_norm"] = merged_c["ev_sales"] / merged_c["ev_sales"].iloc[0]
             fig7 = go.Figure()
             fig7.add_trace(go.Scatter(
                 x=merged_c["year"], y=merged_c["cp_norm"],
-                name="Charger growth (indexed)", mode="lines+markers",
+                name="Public charging-point growth (indexed)", mode="lines+markers",
                 line=dict(color=NAVY, width=2.5), marker=dict(size=6),
                 hovertemplate="%{x}: %{y:.1f}x baseline<extra></extra>",
             ))
@@ -299,11 +299,11 @@ def render(df: pd.DataFrame):
             st.plotly_chart(fig7, config=chart_config())
 
         # ── Infrastructure projection ──────────────────────────────────────────
-        st.markdown(f"##### Infrastructure forecast — when does {selected} reach the IEA target?")
+        st.markdown(f"##### Infrastructure forecast — when does {selected} reach the 10-EV reference level?")
         st.caption(
-            "Linear extrapolation of the last 3 years of charger growth. "
-            "Shows when the country is projected to reach the IEA reference of 10 EVs per charger. "
-            "⚠️ Linear extrapolation only — policy changes or EV demand surges can shift this significantly."
+            "Linear extrapolation of the recent EVs-per-public-charging-point trend. "
+            "Shows when the country is projected to reach the study’s reference level of 10 EVs per public charging point. "
+            "⚠️ Linear extrapolation only — policy changes, charging-point deployment or shifts in EV demand can change this substantially."
         )
         if len(epc_c) >= 3 and not epc_c.empty:
             from scipy.stats import linregress
@@ -319,7 +319,7 @@ def render(df: pd.DataFrame):
             future_years = list(range(last_yr + 1, last_yr + 11))
             proj_vals = [max(slope * y + intercept, 0) for y in future_years]
 
-            # Find when reaches IEA target of 10
+            # Find when the study reference level of 10 is reached
             target = 10
             target_year = None
             for y, v in zip(future_years, proj_vals):
@@ -332,26 +332,26 @@ def render(df: pd.DataFrame):
                 x=epc_c["year"], y=epc_c["ev_per_charger"],
                 mode="lines+markers", name="Historical",
                 line=dict(color=AMBER, width=2.5), marker=dict(size=7, color=AMBER),
-                hovertemplate="%{x}: %{y:.0f} EVs/charger<extra></extra>",
+                hovertemplate="%{x}: %{y:.0f} EVs per public charging point<extra></extra>",
             ))
             fig8.add_trace(go.Scatter(
                 x=future_years, y=proj_vals,
                 mode="lines+markers", name="Projected (linear)",
                 line=dict(color=AMBER, width=2, dash="dash"),
                 marker=dict(size=6, color=AMBER, symbol="diamond"),
-                hovertemplate="%{x}: %{y:.0f} EVs/charger (projected)<extra></extra>",
+                hovertemplate="%{x}: %{y:.0f} EVs per public charging point (projected)<extra></extra>",
             ))
             fig8.add_hline(y=target, line_dash="dot", line_color=GREEN_MED, line_width=1.5,
-                           annotation_text="IEA target (10 EVs/charger)",
+                           annotation_text="Reference level (10)",
                            annotation_font_size=9)
             if target_year:
                 fig8.add_vline(x=target_year, line_dash="dot",
                                line_color=GREEN_MED, line_width=1,
-                               annotation_text=f"Reaches target ~{target_year}",
+                               annotation_text=f"Reaches reference level ~{target_year}",
                                annotation_font_size=9)
 
             lay8 = base_layout(280)
-            lay8.update({"yaxis": {**lay8.get("yaxis",{}), "title": "EVs per charger (lower = better)"},
+            lay8.update({"yaxis": {**lay8.get("yaxis",{}), "title": "EVs per public charging point (lower = more coverage)"},
                           "xaxis": {**lay8.get("xaxis",{}), "title": "Year"}})
             fig8.update_layout(**lay8)
             st.plotly_chart(fig8, config=chart_config())
@@ -359,13 +359,13 @@ def render(df: pd.DataFrame):
             if target_year:
                 current_val = float(epc_c["ev_per_charger"].iloc[-1])
                 st.caption(
-                    f"{selected} currently has **{current_val:.0f} EVs per public charger**. "
-                    f"At the current trend (slope {slope:+.1f}/year), it is projected to reach "
-                    f"the IEA reference of 10 EVs/charger around **{target_year}**."
+                    f"{selected} currently has **{current_val:.0f} EVs per public charging point**. "
+                    f"At the current trend (slope {slope:+.1f} EVs per public charging point per year), it is projected to reach "
+                    f"the study’s reference level of 10 EVs per public charging point around **{target_year}**."
                 )
             else:
                 st.caption(
-                    f"At the current trend, {selected} does not reach the IEA target of 10 EVs/charger "
+                    f"At the current trend, {selected} does not reach the study’s reference level of 10 EVs per public charging point "
                     f"within the 10-year projection window. Infrastructure build-out needs to accelerate."
                 )
     else:
