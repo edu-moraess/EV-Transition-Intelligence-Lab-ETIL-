@@ -259,8 +259,16 @@ def render(df: pd.DataFrame):
             st.plotly_chart(fig6, config=chart_config())
 
         # Infrastructure vs EV sales correlation
-        ev_c = df[df["country"] == selected][["year","ev_sales"]].copy()
-        merged_c = cp_c.merge(ev_c, on="year", how="inner")
+        # NOTE: this page's `df` is not guaranteed to carry the EV sales dataset
+        # (see sidebar notice "This page does not require the EV dataset."),
+        # so guard against a missing/differently-scoped df instead of assuming
+        # "country"/"ev_sales" are always present. Fixes KeyError: 'country'.
+        if "country" in df.columns and "ev_sales" in df.columns:
+            ev_c = df[df["country"] == selected][["year", "ev_sales"]].copy()
+            merged_c = cp_c.merge(ev_c, on="year", how="inner")
+        else:
+            merged_c = pd.DataFrame()
+
         if len(merged_c) >= 4:
             st.markdown(f"##### Infrastructure vs EV sales — {selected}")
             st.caption(
