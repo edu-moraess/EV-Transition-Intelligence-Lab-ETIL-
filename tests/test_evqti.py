@@ -81,6 +81,37 @@ class TestEVQTIAntiLeakage:
                 assert abs(current_growth_t1 - next_year_growth) < 1e-6
 
 
+
+    def test_future_feature_shock_cannot_change_historical_lag_preprocessing(self):
+        df = _make_synthetic_panel(n_countries=20, n_years=12, seed=42)
+        baseline = EVQTI()._build_panel(df)
+
+        shocked = df.copy()
+        shocked.loc[shocked["year"] == 2024, "ev_stock_share"] *= 1000
+        changed = EVQTI()._build_panel(shocked)
+
+        years_to_check = baseline["year"] <= 2022
+        cols = ["ev_stock_share_lag1", "ev_sales_share_lag1"]
+        pd.testing.assert_frame_equal(
+            baseline.loc[years_to_check, cols].reset_index(drop=True),
+            changed.loc[years_to_check, cols].reset_index(drop=True),
+        )
+
+    def test_future_target_shock_cannot_change_earlier_target_bounds(self):
+        df = _make_synthetic_panel(n_countries=20, n_years=12, seed=42)
+        baseline = EVQTI()._build_panel(df)
+
+        shocked = df.copy()
+        shocked.loc[shocked["year"] == 2024, "growth_rate"] *= 1000
+        changed = EVQTI()._build_panel(shocked)
+
+        earlier = baseline["year"] <= 2022
+        pd.testing.assert_series_equal(
+            baseline.loc[earlier, "growth_t1_win"].reset_index(drop=True),
+            changed.loc[earlier, "growth_t1_win"].reset_index(drop=True),
+        )
+
+
 class TestEVQTIWinsorization:
 
     def test_lags_within_winsorized_bounds(self):
