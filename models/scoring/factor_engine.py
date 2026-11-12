@@ -263,7 +263,10 @@ class FactorEngine:
 
     def get_factor_ic(self) -> pd.DataFrame:
         """
-        IC (Spearman correlation with next-year growth) per factor, for validation.
+        In-sample calibration IC (Spearman correlation with next-year growth).
+
+        This is a calibration diagnostic, not out-of-sample validation. Use
+        walk_forward() for expanding-origin rank-association evaluation.
         """
         self._check_fitted()
         return self.ic_by_factor_.copy()
