@@ -206,6 +206,8 @@ class FactorEngine:
                 ["country", "_evaluation_target"],
             ]
             evaluated = scores.merge(targets, on="country", how="left")
+            if not evaluated["_evaluation_target"].notna().any():
+                continue
             valid = evaluated.dropna(subset=["composite_score", "_evaluation_target"])
             if len(valid) >= _MIN_COUNTRIES:
                 ic, p_value = stats.spearmanr(
