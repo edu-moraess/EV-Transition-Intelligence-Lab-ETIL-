@@ -81,31 +81,83 @@ class TestEVQTIAntiLeakage:
                 assert abs(current_growth_t1 - next_year_growth) < 1e-6
 
 
+
+    def test_future_feature_shock_cannot_change_historical_lag_preprocessing(self):
+        df = _make_synthetic_panel(n_countries=20, n_years=12, seed=42)
+        baseline = EVQTI()._build_panel(df)
+
+        shocked = df.copy()
+        shocked.loc[shocked["year"] == 2024, "ev_stock_share"] *= 1000
+        changed = EVQTI()._build_panel(shocked)
+
+        years_to_check = baseline["year"] <= 2022
+        cols = ["ev_stock_share_lag1", "ev_sales_share_lag1"]
+        pd.testing.assert_frame_equal(
+            baseline.loc[years_to_check, cols].reset_index(drop=True),
+            changed.loc[years_to_check, cols].reset_index(drop=True),
+        )
+
+    def test_future_target_shock_cannot_change_earlier_target_bounds(self):
+        df = _make_synthetic_panel(n_countries=20, n_years=12, seed=42)
+        baseline = EVQTI()._build_panel(df)
+
+        shocked = df.copy()
+        shocked["growth_rate"] = (
+            shocked.sort_values(["country", "year"])
+            .groupby("country")["ev_sales"].pct_change() * 100
+        )
+        shocked.loc[shocked["year"] == 2024, "growth_rate"] *= 1000
+        changed = EVQTI()._build_panel(shocked)
+
+        earlier = baseline["year"] <= 2022
+        pd.testing.assert_series_equal(
+            baseline.loc[earlier, "growth_t1_win"].reset_index(drop=True),
+            changed.loc[earlier, "growth_t1_win"].reset_index(drop=True),
+        )
+
+
+
+
+    def test_lags_and_targets_require_adjacent_calendar_years(self):
+        df = _make_synthetic_panel(n_countries=20, n_years=12, seed=42)
+        df = df.loc[
+            ~((df["country"] == "Country_0") & (df["year"] == 2020))
+        ].copy()
+        panel = EVQTI()._build_panel(df)
+
+        row_2021 = panel.loc[
+            panel["country"].eq("Country_0") & panel["year"].eq(2021)
+        ].iloc[0]
+        row_2019 = panel.loc[
+            panel["country"].eq("Country_0") & panel["year"].eq(2019)
+        ].iloc[0]
+
+        assert pd.isna(row_2021["ev_stock_share_lag1"])
+        assert pd.isna(row_2019["growth_t1"])
+
 class TestEVQTIWinsorization:
 
-    def test_lags_within_winsorized_bounds(self):
-        """
-        Lags are clipped to the P1/P99 of their OWN post-shift distribution.
-        A small tolerance is allowed: quantile recomputation on a slightly
-        different sample (e.g. after additional dropna) can shift P1/P99 by
-        a fraction of a percentage point — this is expected floating-point
-        and sampling noise, not a winsorization failure. The real invariant
-        being tested is that no value is wildly outside the expected range
-        (i.e. winsorization happened at all), not bit-exact boundary matching.
-        """
-        df = _make_synthetic_panel()
-        model = EVQTI()
-        model.fit(df)
-        panel = model.panel_
+    def test_lags_are_winsorized_using_prior_years_only(self):
+        df = _make_synthetic_panel(n_countries=20, n_years=12)
+        panel = EVQTI()._build_panel(df)
 
-        for col in ["ev_stock_share_lag1", "ev_sales_share_lag1"]:
-            valid = panel[col].dropna()
-            if len(valid) < 10:
-                continue
-            p1, p99 = valid.quantile(0.01), valid.quantile(0.99)
-            tolerance = (p99 - p1) * 0.01  # 1% of the IQR-like range as slack
-            assert valid.min() >= p1 - tolerance
-            assert valid.max() <= p99 + tolerance
+        for col in ["ev_stock_share", "ev_sales_share"]:
+            lag_col = f"{col}_lag1"
+            raw_lag = panel.groupby("country")[col].shift(1)
+            for year in sorted(panel["year"].unique()):
+                current = panel["year"].eq(year)
+                history = raw_lag.loc[panel["year"].lt(year)].dropna()
+                if len(history) < 10:
+                    pd.testing.assert_series_equal(
+                        panel.loc[current, lag_col].reset_index(drop=True),
+                        raw_lag.loc[current].reset_index(drop=True),
+                        check_names=False,
+                    )
+                    continue
+                lo, hi = history.quantile(0.01), history.quantile(0.99)
+                expected = raw_lag.loc[current].clip(lo, hi).reset_index(drop=True)
+                actual = panel.loc[current, lag_col].reset_index(drop=True)
+                pd.testing.assert_series_equal(actual, expected, check_names=False)
 
     def test_target_winsorized_at_5_95(self):
         df = _make_synthetic_panel()
