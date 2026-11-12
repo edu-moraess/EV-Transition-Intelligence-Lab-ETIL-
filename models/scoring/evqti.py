@@ -16,10 +16,11 @@ FEATURES (somente as com IC estatisticamente significativo p<0.05):
   Momentum de 1 ano é ruído no cross-section de países; não prediz crescimento futuro.
 
 NORMALIZAÇÃO:
-  1. Winsorização 1%-99% nas features RAW (antes de criar lags)
-  2. Winsorização 5%-95% no target growth_t+1
-  3. Z-score cross-section
-  4. Score = -(w1*z_stock + w2*z_sales)  — sinal negativo = early-stage positivo
+  1. Criar lags de calendário exatos (t-1); anos ausentes permanecem missing
+  2. Winsorização expansiva das features, usando somente anos anteriores
+  3. Winsorização diagnóstica do target, usando somente labels já observáveis
+  4. Z-score cross-section
+  5. Score = -(w1*z_stock + w2*z_sales)  — sinal negativo = early-stage positivo
 
 VALIDAÇÃO:
   - IC (Pearson sobre ranks) e Rank IC (Spearman) por ano
@@ -138,16 +139,14 @@ class EVQTI:
         step: int = 1,
     ) -> pd.DataFrame:
         """
-        Walk-forward backtest: for each window, the feature weights and
-        winsorization bounds are NOT re-fit — EVQTI's weights are fixed
-        and empirically pre-calibrated (see module docstring), so this
-        backtest measures something more honest than re-fitting in-sample
-        each window: it measures whether a FIXED, already-published factor
-        continues to hold out-of-sample across rolling periods.
+        Fixed-weight walk-forward evaluation. EVQTI weights remain pre-specified,
+        while feature and target winsorization bounds are recalculated at each
+        year using only earlier observations. This tests whether the fixed factor
+        continues to hold out-of-sample without using future preprocessing bounds.
 
         For each window:
-          - "train" years are shown for reference only (no parameters fit here)
-          - "test" years are where IC is actually measured
+          - "train" years define the initial reference window; weights are not re-fit
+          - "test" years are where IC is measured using point-in-time preprocessing
 
         This answers: "is the signal degrading over time?" rather than
         "can we always re-fit a signal that worked." The second question
