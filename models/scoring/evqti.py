@@ -234,9 +234,22 @@ class EVQTI:
                 panel["ev_sales_share"] = np.nan
 
         if "growth_rate" not in panel.columns:
-            panel["growth_rate"] = (
-                panel.groupby("country")["ev_sales"].pct_change() * 100
+            previous_sales = panel[["country", "year", "ev_sales"]].copy()
+            previous_sales["year"] = previous_sales["year"] + 1
+            previous_sales = previous_sales.rename(
+                columns={"ev_sales": "_ev_sales_previous_year"}
             )
+            panel = panel.merge(
+                previous_sales[["country", "year", "_ev_sales_previous_year"]],
+                on=["country", "year"],
+                how="left",
+                validate="one_to_one",
+            )
+            denominator = panel["_ev_sales_previous_year"].replace(0, np.nan)
+            panel["growth_rate"] = (
+                panel["ev_sales"] / denominator - 1
+            ) * 100
+            panel = panel.drop(columns=["_ev_sales_previous_year"])
 
         years = sorted(panel["year"].dropna().unique())
 
@@ -246,7 +259,15 @@ class EVQTI:
             if col not in panel.columns:
                 continue
             lag_col = f"{col}_lag1"
-            panel[lag_col] = panel.groupby("country")[col].shift(1)
+            lag_source = panel[["country", "year", col]].copy()
+            lag_source["year"] = lag_source["year"] + 1
+            lag_source = lag_source.rename(columns={col: lag_col})
+            panel = panel.drop(columns=[lag_col], errors="ignore").merge(
+                lag_source[["country", "year", lag_col]],
+                on=["country", "year"],
+                how="left",
+                validate="one_to_one",
+            )
             raw_lag = panel[lag_col].copy()
             clipped_lag = raw_lag.copy()
 
@@ -263,7 +284,15 @@ class EVQTI:
 
         # Target is retained raw for evaluation; its clipped companion is
         # diagnostic only and never enters the score calculation.
-        panel["growth_t1"] = panel.groupby("country")["growth_rate"].shift(-1)
+        target_source = panel[["country", "year", "growth_rate"]].copy()
+        target_source["year"] = target_source["year"] - 1
+        target_source = target_source.rename(columns={"growth_rate": "growth_t1"})
+        panel = panel.drop(columns=["growth_t1"], errors="ignore").merge(
+            target_source[["country", "year", "growth_t1"]],
+            on=["country", "year"],
+            how="left",
+            validate="one_to_one",
+        )
         raw_target = panel["growth_t1"].copy()
         clipped_target = raw_target.copy()
 
