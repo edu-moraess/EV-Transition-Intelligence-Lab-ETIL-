@@ -102,6 +102,10 @@ class TestEVQTIAntiLeakage:
         baseline = EVQTI()._build_panel(df)
 
         shocked = df.copy()
+        shocked["growth_rate"] = (
+            shocked.sort_values(["country", "year"])
+            .groupby("country")["ev_sales"].pct_change() * 100
+        )
         shocked.loc[shocked["year"] == 2024, "growth_rate"] *= 1000
         changed = EVQTI()._build_panel(shocked)
 
