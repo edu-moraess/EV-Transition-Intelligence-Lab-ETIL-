@@ -211,17 +211,20 @@ class EVQTI:
 
     def _build_panel(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Pipeline correto de construção:
-          1. Winsorizar features RAW (1%-99%)
-          2. Criar lags (t-1) sobre valores já winsorizados
-          3. Criar target growth_t+1 (sem winsorização ainda)
-          4. Winsorizar target (5%-95%)
+        Build lagged features and next-year target with expanding, point-in-time
+        winsorization.
 
-        Garante que os lags também estão dentro dos bounds winsorizados.
+        For a score row at year t:
+        - lagged features are clipped using only lag observations from rows < t;
+        - growth_t1 is an evaluation label, not a scoring input;
+        - target clipping bounds use only target labels from rows < t, whose
+          t+1 outcomes are observable by the end of year t.
+
+        This prevents future years from changing historical preprocessing.
         """
         panel = df.sort_values(["country", "year"]).copy()
+        panel["year"] = pd.to_numeric(panel["year"], errors="coerce")
 
-        # Garantir ev_sales_share
         if "ev_sales_share" not in panel.columns:
             if "total_sales" in panel.columns and panel["total_sales"].notna().any():
                 panel["ev_sales_share"] = (
@@ -230,49 +233,51 @@ class EVQTI:
             else:
                 panel["ev_sales_share"] = np.nan
 
-        # Garantir growth_rate (para o target)
         if "growth_rate" not in panel.columns:
             panel["growth_rate"] = (
                 panel.groupby("country")["ev_sales"].pct_change() * 100
             )
 
-        # ── Passo 1: Winsorizar features RAW ────────────────────────────
+        years = sorted(panel["year"].dropna().unique())
+
+        # Create raw lags first. Bounds are fitted separately at each year
+        # from earlier rows only, then applied to that year's cross-section.
         for col in ["ev_stock_share", "ev_sales_share"]:
             if col not in panel.columns:
                 continue
-            valid = panel[col].dropna()
-            if len(valid) < 10:
-                continue
-            p1  = valid.quantile(0.01)
-            p99 = valid.quantile(0.99)
-            panel[col] = panel[col].clip(p1, p99)
+            lag_col = f"{col}_lag1"
+            panel[lag_col] = panel.groupby("country")[col].shift(1)
+            raw_lag = panel[lag_col].copy()
+            clipped_lag = raw_lag.copy()
 
-        # ── Passo 2: Criar lags e clipar consistentemente ───────────────
-        # Os lags são clipados com P1/P99 da própria distribuição do lag,
-        # garantindo que a winsorização é sempre relativa ao que é observado.
-        for col in ["ev_stock_share", "ev_sales_share"]:
-            if col not in panel.columns:
-                continue
-            panel[f"{col}_lag1"] = panel.groupby("country")[col].shift(1)
-            lag_valid = panel[f"{col}_lag1"].dropna()
-            if len(lag_valid) < 10:
-                continue
-            lp1  = lag_valid.quantile(0.01)
-            lp99 = lag_valid.quantile(0.99)
-            panel[f"{col}_lag1"] = panel[f"{col}_lag1"].clip(lp1, lp99)
+            for year in years:
+                current = panel["year"].eq(year)
+                history = raw_lag.loc[panel["year"].lt(year)].dropna()
+                if len(history) < 10:
+                    continue
+                lo = history.quantile(0.01)
+                hi = history.quantile(0.99)
+                clipped_lag.loc[current] = raw_lag.loc[current].clip(lo, hi)
 
-        # ── Passo 3: Target — crescimento futuro ─────────────────────────
+            panel[lag_col] = clipped_lag
+
+        # Target is retained raw for evaluation; its clipped companion is
+        # diagnostic only and never enters the score calculation.
         panel["growth_t1"] = panel.groupby("country")["growth_rate"].shift(-1)
+        raw_target = panel["growth_t1"].copy()
+        clipped_target = raw_target.copy()
 
-        # ── Passo 4: Winsorizar target ────────────────────────────────────
-        valid_t = panel["growth_t1"].dropna()
-        if len(valid_t) > 10:
-            p_lo = valid_t.quantile(_TARGET_WIN_LOW)
-            p_hi = valid_t.quantile(_TARGET_WIN_HIGH)
-            panel["growth_t1_win"] = panel["growth_t1"].clip(p_lo, p_hi)
-        else:
-            panel["growth_t1_win"] = panel["growth_t1"]
+        for year in years:
+            current = panel["year"].eq(year)
+            # Row r<year has target growth_rate[r+1], known by origin=year.
+            history = raw_target.loc[panel["year"].lt(year)].dropna()
+            if len(history) < 10:
+                continue
+            lo = history.quantile(_TARGET_WIN_LOW)
+            hi = history.quantile(_TARGET_WIN_HIGH)
+            clipped_target.loc[current] = raw_target.loc[current].clip(lo, hi)
 
+        panel["growth_t1_win"] = clipped_target
         return panel
 
     def _compute_score(self, df_cross: pd.DataFrame) -> pd.DataFrame:
