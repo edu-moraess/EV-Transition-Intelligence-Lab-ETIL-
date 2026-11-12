@@ -169,10 +169,22 @@ class FactorEngine:
         if "growth_rate" not in source.columns:
             if "ev_sales" not in source.columns:
                 raise ValueError("df must contain growth_rate or ev_sales.")
-            source = source.sort_values(["country", "year"])
-            source["growth_rate"] = (
-                source.groupby("country")["ev_sales"].pct_change() * 100.0
+            previous_sales = source[["country", "year", "ev_sales"]].copy()
+            previous_sales["year"] = previous_sales["year"] + 1
+            previous_sales = previous_sales.rename(
+                columns={"ev_sales": "_ev_sales_previous_year"}
             )
+            source = source.merge(
+                previous_sales[["country", "year", "_ev_sales_previous_year"]],
+                on=["country", "year"],
+                how="left",
+                validate="one_to_one",
+            )
+            denominator = source["_ev_sales_previous_year"].replace(0, np.nan)
+            source["growth_rate"] = (
+                source["ev_sales"] / denominator - 1
+            ) * 100.0
+            source = source.drop(columns=["_ev_sales_previous_year"])
 
         years = sorted(source["year"].unique())
         records = []
