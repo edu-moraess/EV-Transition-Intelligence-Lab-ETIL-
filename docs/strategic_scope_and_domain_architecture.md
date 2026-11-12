@@ -18,7 +18,7 @@ The platform is organized around connected research domains:
 
 | Domain | Scope | Initial analytical questions |
 |---|---|---|
-| Automotive markets | Vehicle sales, stock, powertrains, segments, manufacturers where public data permits | How are vehicle markets and technology shares changing? |
+| Automotive markets | Passenger cars, light commercial vehicles, buses, trucks, motorcycles, scooters, three-wheelers, quadricycles and other vehicle classes where source definitions permit | How are vehicle markets and technology shares changing? |
 | Mobility systems | Passenger and freight activity, road, rail, aviation, maritime, two-/three-wheelers | How are mobility demand and modal composition changing? |
 | Energy and fuels | Electricity, oil products, gas, biofuels, hydrogen and synthetic fuels | How are transport energy sources and costs changing? |
 | Charging and infrastructure | Public/private charging where measurable, power bands, access, grid interfaces | Where are infrastructure gaps and constraints emerging? |
@@ -117,7 +117,15 @@ Build scenarios from explicit assumptions about activity, technology shares, eff
 - **Domain 4:** Add battery, industrial, trade and supply-chain research.
 - **Integration:** Add cross-domain scenarios and composite indicators only after their component measures pass quality and validation gates.
 
-## 8. Explicit exclusions for the initial expansion
+## 8. Vehicle taxonomy and coverage requirements
+
+The IEA Global EV Data Explorer distinguishes Cars, 2 and 3 wheelers, Vans, Buses and Trucks. Its published definition for 2- and 3-wheelers includes motorcycles, scooters and rickshaws; two-wheelers are subject to the stated speed/class scope, e-bikes and low-speed scooters are excluded, and three-wheelers follow UNECE L2/L4/L5 classes. These definitions must be preserved in ETIL metadata rather than replaced with an informal label.
+
+Quadricycles require special treatment. The current IEA mode list does not expose a dedicated quadricycle mode. ETIL must not silently count L6/L7 quadricycles as Cars or 2/3 wheelers. Their inclusion in any source category must be demonstrated from that source's methodology; otherwise they require a separate source and a distinct mapping with explicit limitations.
+
+The repository's current ingestion code already recognizes `2 and 3 wheelers` as a vehicle mode, and the application exposes it as a selectable mode. However, the raw CSV row counts, historical coverage, projection coverage and country coverage still require a direct dataset-level audit before we can mark the mode as verified in the committed data files.
+
+## 9. Explicit exclusions for the initial expansion
 
 Do not initially build:
 
@@ -129,13 +137,13 @@ Do not initially build:
 - Causal claims from correlations or country-level aggregate data.
 - A complex knowledge graph or distributed architecture before scale and use cases justify it.
 
-## 9. Relationship to existing ETIL
+## 10. Relationship to existing ETIL
 
-The current IEA EV pipeline remains the first validated domain adapter. It should not be discarded or rewritten wholesale.
+The current IEA EV pipeline remains the first domain adapter. It should not be discarded or rewritten wholesale. Its vehicle-mode dimension must remain explicit: Cars, 2 and 3 wheelers, Vans, Buses and Trucks are separate analytical populations, not interchangeable observations.
 
 The existing diffusion, forecasting, regime and scoring modules should become reusable analytical capabilities only after their assumptions and temporal validation are explicit. Models must declare which domain and measure they support; a vehicle-adoption model cannot automatically be applied to energy demand or freight activity without a justified formulation.
 
-## 10. Acceptance criteria for this architecture
+## 11. Acceptance criteria for this architecture
 
 Before new domains are implemented:
 
