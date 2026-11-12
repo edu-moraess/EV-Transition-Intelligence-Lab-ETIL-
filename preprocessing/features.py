@@ -35,6 +35,12 @@ class FeatureEngineer:
         missing = required - set(self.df.columns)
         if missing:
             raise ValueError(f"Missing required feature columns: {sorted(missing)}")
+        self.df["year"] = pd.to_numeric(self.df["year"], errors="coerce")
+        if self.df["year"].isna().any():
+            raise ValueError("Feature engineering requires valid calendar years.")
+        if (self.df["year"] % 1 != 0).any():
+            raise ValueError("Feature engineering requires integer calendar years.")
+        self.df["year"] = self.df["year"].astype(int)
         if self.df.duplicated(["country", "year"]).any():
             raise ValueError("Feature engineering requires unique country-year rows.")
 
