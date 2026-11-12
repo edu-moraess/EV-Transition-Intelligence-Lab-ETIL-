@@ -92,3 +92,45 @@ def test_factor_engine_default_cutoff_uses_only_labels_observed_by_latest_year()
         df["country"].eq("Country 0") & df["year"].eq(2026), "growth_rate"
     ].iloc[0]
     assert row["growth_t1"] == observed_growth_2026
+
+
+def test_factor_engine_lag_and_target_require_adjacent_calendar_years():
+    rows = []
+    for year in [2020, 2021, 2023, 2024]:
+        rows.append({
+            "country": "Gapland",
+            "year": year,
+            "ev_sales": 100 + year,
+            "ev_stock_share": float(year - 2010),
+            "ev_sales_share": float(year - 2015),
+            "growth_rate": float(year - 2019),
+        })
+    panel = FactorEngine()._build_panel(
+        pd.DataFrame(rows), fuel_df=None, infra_df=None, calibration_end_year=2023
+    )
+
+    row_2023 = panel.loc[panel["year"].eq(2023)].iloc[0]
+    row_2021 = panel.loc[panel["year"].eq(2021)].iloc[0]
+    assert pd.isna(row_2023["ev_stock_share_lag1"])
+    assert pd.isna(row_2021["growth_t1"])
+
+
+def test_feature_engineer_growth_and_momentum_respect_calendar_gaps():
+    from preprocessing.features import FeatureEngineer
+
+    rows = [
+        {"country": "Gapland", "year": year, "ev_sales": sales}
+        for year, sales in [
+            (2010, 100), (2011, 110), (2012, 121),
+            (2013, 133.1), (2015, 160), (2016, 176), (2017, 193.6),
+        ]
+    ]
+    engineered = FeatureEngineer(pd.DataFrame(rows)).engineer()
+
+    growth_2015 = engineered.loc[engineered["year"].eq(2015), "growth_rate"].iloc[0]
+    growth_2016 = engineered.loc[engineered["year"].eq(2016), "growth_rate"].iloc[0]
+    momentum_2017 = engineered.loc[engineered["year"].eq(2017), "momentum_3y"].iloc[0]
+
+    assert pd.isna(growth_2015)
+    assert growth_2016 == pytest.approx(10.0)
+    assert pd.isna(momentum_2017)
