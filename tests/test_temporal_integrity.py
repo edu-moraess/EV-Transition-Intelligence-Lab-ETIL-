@@ -37,7 +37,7 @@ def test_factor_engine_target_for_cutoff_row_is_observed_by_latest_year():
     assert engine.calibration_end_year_ == 2024
 
 
-def test_factor_engine_future_growth_shock_after_as_of_does_not_change_calibration():
+def test_factor_engine_growth_beyond_calibration_window_does_not_change_weights():
     df = _temporal_factor_panel()
     baseline = FactorEngine()
     baseline.fit(df, calibration_end_year=2024)
@@ -76,3 +76,19 @@ def test_factor_engine_walk_forward_predictions_are_isolated_from_future_rows():
         left["target_growth_t1"].to_numpy(),
         right["target_growth_t1"].to_numpy(),
     )
+
+
+def test_factor_engine_default_cutoff_uses_only_labels_observed_by_latest_year():
+    df = _temporal_factor_panel()
+    engine = FactorEngine(weights={"penetration_stock": 1.0})
+    engine.fit(df)
+
+    assert engine.as_of_year_ == 2026
+    assert engine.calibration_end_year_ == 2025
+    row = engine.panel_.loc[
+        engine.panel_["country"].eq("Country 0") & engine.panel_["year"].eq(2025)
+    ].iloc[0]
+    observed_growth_2026 = df.loc[
+        df["country"].eq("Country 0") & df["year"].eq(2026), "growth_rate"
+    ].iloc[0]
+    assert row["growth_t1"] == observed_growth_2026
