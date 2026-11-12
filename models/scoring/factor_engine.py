@@ -197,12 +197,13 @@ class FactorEngine:
                 continue
 
             # Future outcome is joined after the model has produced its score.
-            ordered = source.sort_values(["country", "year"]).copy()
-            ordered["_evaluation_target"] = (
-                ordered.groupby("country")["growth_rate"].shift(-1)
+            target_lookup = source[["country", "year", "growth_rate"]].copy()
+            target_lookup["year"] = target_lookup["year"] - 1
+            target_lookup = target_lookup.rename(
+                columns={"growth_rate": "_evaluation_target"}
             )
-            targets = ordered.loc[
-                ordered["year"].eq(origin_year),
+            targets = target_lookup.loc[
+                target_lookup["year"].eq(origin_year),
                 ["country", "_evaluation_target"],
             ]
             evaluated = scores.merge(targets, on="country", how="left")
@@ -379,10 +380,16 @@ class FactorEngine:
                 logger.debug(f"Factor '{factor_name}' skipped: column '{col}' not in panel.")
                 continue
             lag_col = f"{col}_lag1"
-            panel[lag_col] = (
-                panel.sort_values(["country", "year"])
-                .groupby("country")[col]
-                .transform(lambda x: x.shift(1))
+            # Exact calendar lag: a missing year must produce NaN, not
+            # silently substitute the previous available observation.
+            lag_source = panel[["country", "year", col]].copy()
+            lag_source["year"] = lag_source["year"] + 1
+            lag_source = lag_source.rename(columns={col: lag_col})
+            panel = panel.drop(columns=[lag_col], errors="ignore").merge(
+                lag_source[["country", "year", lag_col]],
+                on=["country", "year"],
+                how="left",
+                validate="one_to_one",
             )
             # Winsorise using calibration years only; never use future rows.
             calibration_values = panel.loc[
@@ -395,10 +402,16 @@ class FactorEngine:
             active_factors[factor_name] = (lag_col, direction, group)
 
         # Compute target: next-year growth (t+1)
-        panel["growth_t1"] = (
-            panel.sort_values(["country", "year"])
-            .groupby("country")["growth_rate"]
-            .transform(lambda x: x.shift(-1))
+        # Exact t+1 target mapping. A gap in the calendar leaves the
+        # target missing instead of using the next available row.
+        target_source = panel[["country", "year", "growth_rate"]].copy()
+        target_source["year"] = target_source["year"] - 1
+        target_source = target_source.rename(columns={"growth_rate": "growth_t1"})
+        panel = panel.drop(columns=["growth_t1"], errors="ignore").merge(
+            target_source[["country", "year", "growth_t1"]],
+            on=["country", "year"],
+            how="left",
+            validate="one_to_one",
         )
         # A row t's target is growth_rate[t+1]. At forecast origin as_of_year,
         # the last eligible calibration row is as_of_year - 1 (default cutoff),
