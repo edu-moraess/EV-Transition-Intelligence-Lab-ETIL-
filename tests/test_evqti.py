@@ -116,6 +116,25 @@ class TestEVQTIAntiLeakage:
         )
 
 
+
+
+    def test_lags_and_targets_require_adjacent_calendar_years(self):
+        df = _make_synthetic_panel(n_countries=20, n_years=12, seed=42)
+        df = df.loc[
+            ~((df["country"] == "Country_0") & (df["year"] == 2020))
+        ].copy()
+        panel = EVQTI()._build_panel(df)
+
+        row_2021 = panel.loc[
+            panel["country"].eq("Country_0") & panel["year"].eq(2021)
+        ].iloc[0]
+        row_2019 = panel.loc[
+            panel["country"].eq("Country_0") & panel["year"].eq(2019)
+        ].iloc[0]
+
+        assert pd.isna(row_2021["ev_stock_share_lag1"])
+        assert pd.isna(row_2019["growth_t1"])
+
 class TestEVQTIWinsorization:
 
     def test_lags_are_winsorized_using_prior_years_only(self):
