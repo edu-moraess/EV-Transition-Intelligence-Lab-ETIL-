@@ -259,6 +259,10 @@ class TestEVQTIWalkForwardCalibration:
 
     def test_future_target_shock_cannot_change_prior_origin_weights(self):
         df = _make_synthetic_panel(n_countries=20, n_years=12, seed=42)
+        df["growth_rate"] = (
+            df.sort_values(["country", "year"])
+            .groupby("country")["ev_sales"].pct_change() * 100
+        )
         baseline = EVQTI().backtest(df, train_years=6)
         shocked = df.copy()
         shocked.loc[shocked["year"].eq(2021), "growth_rate"] *= 1000
