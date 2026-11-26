@@ -40,7 +40,7 @@ historical IEA 2026 Cars panel (2010–2025); they are descriptive reference
 weights and must not be presented as point-in-time or independently
 out-of-sample calibrated.
 
-The EVQTI `backtest()` uses a separate expanding-origin evaluation:
+The EVQTI `backtest()` uses a separate rolling-origin evaluation:
 
 1. At test origin year `T`, the training window contains the preceding
    `train_years` calendar years, ending at `T-1`.
