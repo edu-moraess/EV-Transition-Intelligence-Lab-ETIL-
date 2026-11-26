@@ -54,9 +54,9 @@ def render(df: pd.DataFrame):
 
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Mean Rank IC", f"{s.get('ic_mean', 0):+.3f}",
-              help="Spearman correlation between EVQTI(t-1) and EV growth(t+1). Threshold: |IC| > 0.10.")
+              help="Spearman correlation in the historical in-sample diagnostic; it is not an out-of-sample estimate.")
     c2.metric("Information Ratio", f"{s.get('ir', 0):.2f}",
-              help="IC mean divided by IC standard deviation. IR > 0.5 = consistent signal.")
+              help="Historical mean Rank IC divided by its standard deviation; descriptive, sample-dependent.")
     c3.metric("Years with positive IC", f"{s.get('pct_positive', 0):.0f}%",
               help="Proportion of historical years with positive in-sample Rank IC.")
     c4.metric("Years statistically significant", f"{s.get('pct_sig', 0):.0f}%",
@@ -71,8 +71,8 @@ def render(df: pd.DataFrame):
     with col_a:
         st.markdown("##### IC by year — does the signal hold over time?")
         st.caption(
-            "Each bar is the correlation between EVQTI and next-year growth for that year. "
-            "The signal strengthens after 2020 as EV markets gained enough scale."
+            "Each bar is the historical in-sample association using the fixed reference weights. "
+            "It is descriptive and does not establish out-of-sample predictive performance."
         )
         if not ic_df.empty:
             fig_ic = go.Figure()
@@ -84,10 +84,8 @@ def render(df: pd.DataFrame):
                 hovertemplate="Year %{x}<br>Rank IC: %{y:.3f}<br>n=%{customdata} countries<extra></extra>",
                 customdata=ic_df["n"],
             ))
-            fig_ic.add_hline(y=0.10, line_dash="dot",
-                             line_color="rgba(128,128,128,0.4)", line_width=1,
-                             annotation_text="Robust threshold (0.10)",
-                             annotation_font_size=9)
+            fig_ic.add_hline(y=0, line_dash="dot",
+                             line_color="rgba(128,128,128,0.4)", line_width=1)
             lay = base_layout(300)
             lay.update({"yaxis": {**lay.get("yaxis",{}), "title": "Rank IC", "range": [-0.40, 0.60]},
                          "showlegend": False})
@@ -139,10 +137,8 @@ def render(df: pd.DataFrame):
                 marker=dict(size=8, color=NAVY),
                 hovertemplate="Year %{x}<br>IC: %{y:.3f}<extra></extra>",
             ))
-            fig_bt.add_hline(y=0.10, line_dash="dot",
-                             line_color="rgba(128,128,128,0.4)", line_width=1,
-                             annotation_text="Robust threshold (0.10)",
-                             annotation_font_size=9)
+            fig_bt.add_hline(y=0, line_dash="dot",
+                             line_color="rgba(128,128,128,0.4)", line_width=1)
             lay_bt = base_layout(280, "Walk-forward Rank IC (train-only weights)")
             lay_bt.update({"yaxis": {**lay_bt.get("yaxis",{}), "title": "IC (test year)"},
                             "showlegend": False})
@@ -166,7 +162,7 @@ def render(df: pd.DataFrame):
     # ── Ranking ────────────────────────────────────────────────────────────────
     st.markdown("### Country ranking — where is opportunity concentrated?")
     st.markdown(
-        "Higher score = stronger early-stage signal = more likely to see above-average growth next year. "
+        "Higher score = stronger early-stage signal, historically associated with above-average next-year growth. "
         "This is not a quality ranking — a high score means the market is early, not that it is better."
     )
     n_show = st.slider("Countries to display", 10, len(rdf), min(30, len(rdf)))
