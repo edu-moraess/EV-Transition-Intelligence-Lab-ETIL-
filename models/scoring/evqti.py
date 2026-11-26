@@ -141,7 +141,7 @@ class EVQTI:
         min_countries: int = 10,
     ) -> pd.DataFrame:
         """
-        Expanding-origin backtest with weights calibrated on past labels only.
+        Rolling-origin backtest with weights calibrated on past labels only.
 
         At test origin T, calibration uses rows t < T, whose t+1 outcomes
         are observable by T. The test score uses lagged features at T and
