@@ -2,7 +2,7 @@
 """
 EVQTI — EV Quant Transition Index (v3)
 
-Fator quantitativo anti-leakage com pesos calibrados empiricamente via IC.
+Fator de pesquisa com pesos de referência fixos; o backtest recalibra pesos somente com labels anteriores.
 
 LÓGICA ECONÔMICA:
   Lei de difusão de Bass aplicada ao cross-section de países:
@@ -36,7 +36,9 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# Pesos calibrados pelo |IC| empírico sobre IEA 2026 (Cars, 2010-2025)
+# Pesos de referência derivados do IC empírico no painel histórico IEA 2026
+# (Cars, 2010-2025). São pesos descritivos de referência, NÃO pesos point-in-time.
+# O backtest abaixo estima novos pesos apenas com os anos de treino de cada origem.
 # |IC| stock=0.259 / (0.259+0.275) = 0.4851
 # |IC| sales=0.275 / (0.259+0.275) = 0.5149
 _WEIGHTS = {
