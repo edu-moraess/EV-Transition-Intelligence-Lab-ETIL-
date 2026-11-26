@@ -44,7 +44,7 @@ The EVQTI `backtest()` uses a separate expanding-origin evaluation:
 
 1. At test origin year `T`, the training window contains the preceding
    `train_years` calendar years, ending at `T-1`.
-2. A training row `t) is eligible only when its next-year label
+2. A training row `t` is eligible only when its next-year label
    `growth_t1` is observable by origin `T` (therefore `t < T`).
 3. For each feature, directional annual Spearman ICs are calculated inside
    the training window. Positive mean directional ICs determine normalized
