@@ -136,76 +136,191 @@ class EVQTI:
         train_years: int = 6,
         test_years: int = 1,
         step: int = 1,
+        min_countries: int = 10,
     ) -> pd.DataFrame:
         """
-        Walk-forward backtest: for each window, the feature weights and
-        winsorization bounds are NOT re-fit — EVQTI's weights are fixed
-        and empirically pre-calibrated (see module docstring), so this
-        backtest measures something more honest than re-fitting in-sample
-        each window: it measures whether a FIXED, already-published factor
-        continues to hold out-of-sample across rolling periods.
+        Expanding-origin backtest with weights calibrated on past labels only.
 
-        For each window:
-          - "train" years are shown for reference only (no parameters fit here)
-          - "test" years are where IC is actually measured
+        At test origin T, calibration uses rows t < T, whose t+1 outcomes
+        are observable by T. The test score uses lagged features at T and
+        is evaluated against raw growth_t1 (not the winsorized diagnostic).
 
-        This answers: "is the signal degrading over time?" rather than
-        "can we always re-fit a signal that worked." The second question
-        is trivially yes and tells you nothing about robustness.
-
-        Parameters
-        ----------
-        train_years : size of the reference window (not used for fitting,
-                      shown for context — EVQTI has no in-sample parameters
-                      beyond the fixed, pre-calibrated weights)
-        test_years  : number of years per test window
-        step        : how many years to advance the window each iteration
-
-        Returns
-        -------
-        pd.DataFrame
-            Columns: window_start, window_end, ic_mean, ic_std, n_years, n_obs
+        Annual IEA revisions/publication vintages are not available, so this
+        is temporal-order validation, not a fully vintage-aware real-time test.
         """
-        panel = self._build_panel(df)
-        years = sorted(panel["year"].unique())
-        years = years[1:-1]  # drop first (no lag) and last (no target) year
+        if train_years < 3:
+            raise ValueError("train_years must be at least 3.")
+        if test_years < 1 or step < 1 or min_countries < 3:
+            raise ValueError("test_years, step and min_countries must be positive.")
 
-        if len(years) < train_years + test_years:
-            logger.warning(
-                f"Not enough years for backtest: have {len(years)}, "
-                f"need {train_years + test_years}."
+        panel = self._build_panel(df)
+        years = sorted(int(y) for y in panel["year"].dropna().unique())
+        year_set = set(years)
+        feature_directions = {
+            "ev_stock_share": -1.0,
+            "ev_sales_share": -1.0,
+        }
+        yearly_results = []
+        min_calibration_years = max(3, (train_years + 1) // 2)
+
+        for test_year in years:
+            calibration_years = list(range(test_year - train_years, test_year))
+            if not all(year in year_set for year in calibration_years):
+                continue
+
+            calibrated_ic = {}
+            calibration_counts = {}
+            for feature, direction in feature_directions.items():
+                lag_col = f"{feature}_lag1"
+                annual_ics = []
+                for train_year in calibration_years:
+                    sample = panel.loc[
+                        panel["year"].eq(train_year), [lag_col, "growth_t1"]
+                    ].dropna()
+                    if (
+                        len(sample) < min_countries
+                        or sample[lag_col].nunique() < 2
+                        or sample["growth_t1"].nunique() < 2
+                    ):
+                        continue
+                    ic, _ = stats.spearmanr(sample[lag_col], sample["growth_t1"])
+                    if np.isfinite(ic):
+                        annual_ics.append(float(direction * ic))
+
+                calibration_counts[feature] = len(annual_ics)
+                if len(annual_ics) >= min_calibration_years:
+                    calibrated_ic[feature] = float(np.mean(annual_ics))
+
+            if not calibrated_ic:
+                continue
+
+            # Only positive train-period directional IC contributes to weight.
+            raw_weights = {
+                feature: max(value, 0.0)
+                for feature, value in calibrated_ic.items()
+            }
+            weight_total = sum(raw_weights.values())
+            if weight_total > 1e-12:
+                weights = {
+                    feature: value / weight_total
+                    for feature, value in raw_weights.items()
+                }
+                calibration_status = "train_only_ic"
+            else:
+                # Explicit neutral fallback when training data supports no signal.
+                weights = {
+                    feature: 1.0 / len(calibrated_ic)
+                    for feature in calibrated_ic
+                }
+                calibration_status = "equal_weight_fallback"
+
+            test = panel.loc[panel["year"].eq(test_year)].copy()
+            components = []
+            used_weights = {}
+            for feature, weight in weights.items():
+                lag_col = f"{feature}_lag1"
+                if lag_col not in test.columns:
+                    continue
+                values = test[lag_col]
+                if values.notna().mean() < 0.20:
+                    continue
+                median = values.median()
+                if pd.isna(median):
+                    continue
+                filled = values.fillna(median)
+                sd = filled.std()
+                if not np.isfinite(sd) or sd < 1e-9:
+                    continue
+                z_score = (filled - filled.mean()) / sd * feature_directions[feature]
+                components.append((z_score, weight))
+                used_weights[feature] = weight
+
+            used_weight_total = sum(used_weights.values())
+            if not components or used_weight_total <= 1e-12:
+                continue
+
+            score = sum(z * weight for z, weight in components) / used_weight_total
+            evaluation = pd.DataFrame({
+                "country": test["country"],
+                "score": score,
+                "target": test["growth_t1"],
+            }).dropna()
+
+            if (
+                len(evaluation) < min_countries
+                or evaluation["score"].nunique() < 2
+                or evaluation["target"].nunique() < 2
+            ):
+                continue
+
+            rank_ic, rank_p = stats.spearmanr(
+                evaluation["score"], evaluation["target"]
             )
+            pearson_ic, _ = stats.pearsonr(
+                evaluation["score"], evaluation["target"]
+            )
+            if not np.isfinite(rank_ic):
+                continue
+
+            # Stable country ordering makes quintile assignment deterministic
+            # when multiple countries have identical scores.
+            evaluation = evaluation.sort_values("country").copy()
+            score_rank = evaluation["score"].rank(method="first")
+            evaluation["quintile"] = pd.qcut(
+                score_rank, q=5, labels=False, duplicates="drop"
+            )
+            q_means = evaluation.groupby("quintile")["target"].mean()
+            spread = (
+                float(q_means.iloc[-1] - q_means.iloc[0])
+                if len(q_means) >= 2 else np.nan
+            )
+
+            yearly_results.append({
+                "test_year": test_year,
+                "window_start": test_year,
+                "window_end": test_year,
+                "ic_mean": float(rank_ic),
+                "ic_std": 0.0,
+                "rank_ic_pvalue": float(rank_p),
+                "pearson_ic": float(pearson_ic),
+                "top_bottom_spread": spread,
+                "n_years": 1,
+                "n_obs": int(len(evaluation)),
+                "calibration_start_year": calibration_years[0],
+                "calibration_end_year": test_year - 1,
+                "calibration_years_stock": calibration_counts.get("ev_stock_share", 0),
+                "calibration_years_sales": calibration_counts.get("ev_sales_share", 0),
+                "mean_train_ic_stock": calibrated_ic.get("ev_stock_share", np.nan),
+                "mean_train_ic_sales": calibrated_ic.get("ev_sales_share", np.nan),
+                "weight_stock": used_weights.get("ev_stock_share", 0.0) / used_weight_total,
+                "weight_sales": used_weights.get("ev_sales_share", 0.0) / used_weight_total,
+                "calibration_status": calibration_status,
+            })
+
+        if not yearly_results:
             return pd.DataFrame()
 
-        rows = []
-        start_idx = 0
-        while start_idx + train_years + test_years <= len(years):
-            test_window = years[start_idx + train_years : start_idx + train_years + test_years]
-
-            window_ics = []
-            window_n   = 0
-            for yr in test_window:
-                df_yr = self._compute_score(panel[panel["year"] == yr].copy())
-                sub   = df_yr[["country", "evqti_score", "growth_t1_win"]].dropna()
-                if len(sub) < 10:
-                    continue
-                ic_s, _ = stats.spearmanr(sub["evqti_score"], sub["growth_t1_win"])
-                window_ics.append(ic_s)
-                window_n += len(sub)
-
-            if window_ics:
-                rows.append({
-                    "window_start": test_window[0],
-                    "window_end":   test_window[-1],
-                    "ic_mean":      round(float(np.mean(window_ics)), 3),
-                    "ic_std":       round(float(np.std(window_ics)), 3) if len(window_ics) > 1 else 0.0,
-                    "n_years":      len(window_ics),
-                    "n_obs":        window_n,
-                })
-
-            start_idx += step
-
-        return pd.DataFrame(rows)
+        annual = pd.DataFrame(yearly_results).sort_values("test_year").reset_index(drop=True)
+        windows = []
+        for start_idx in range(0, len(annual) - test_years + 1, step):
+            block = annual.iloc[start_idx:start_idx + test_years]
+            windows.append({
+                "window_start": int(block["test_year"].iloc[0]),
+                "window_end": int(block["test_year"].iloc[-1]),
+                "ic_mean": float(block["ic_mean"].mean()),
+                "ic_std": float(block["ic_mean"].std(ddof=0)),
+                "n_years": int(len(block)),
+                "n_obs": int(block["n_obs"].sum()),
+                "rank_ic_pvalue": float(block["rank_ic_pvalue"].mean()),
+                "pearson_ic": float(block["pearson_ic"].mean()),
+                "top_bottom_spread": float(block["top_bottom_spread"].mean()),
+                "calibration_start_year": int(block["calibration_start_year"].min()),
+                "calibration_end_year": int(block["calibration_end_year"].max()),
+                "weight_stock": float(block["weight_stock"].mean()),
+                "weight_sales": float(block["weight_sales"].mean()),
+                "calibration_status": ";".join(sorted(block["calibration_status"].unique())),
+            })
+        return pd.DataFrame(windows)
 
     # ── Construção do painel ─────────────────────────────────────────────
 
