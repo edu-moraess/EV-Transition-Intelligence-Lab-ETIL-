@@ -236,3 +236,38 @@ class TestEVQTIOutput:
         model = EVQTI()
         with pytest.raises(Exception):
             model.fit(df)
+
+
+
+class TestEVQTIWalkForwardCalibration:
+
+    def test_backtest_uses_train_only_calibration_and_raw_target(self):
+        df = _make_synthetic_panel(n_countries=20, n_years=12, seed=42)
+        result = EVQTI().backtest(df, train_years=6, test_years=1, step=1)
+
+        assert not result.empty
+        assert (result["calibration_end_year"] == result["window_start"] - 1).all()
+        assert (result["calibration_start_year"] == result["window_start"] - 6).all()
+        assert result["n_obs"].ge(10).all()
+        assert result["weight_stock"].between(0, 1).all()
+        assert result["weight_sales"].between(0, 1).all()
+        np.testing.assert_allclose(
+            result["weight_stock"] + result["weight_sales"],
+            1.0,
+            atol=1e-8,
+        )
+
+    def test_future_target_shock_cannot_change_prior_origin_weights(self):
+        df = _make_synthetic_panel(n_countries=20, n_years=12, seed=42)
+        baseline = EVQTI().backtest(df, train_years=6)
+        shocked = df.copy()
+        shocked.loc[shocked["year"].eq(2021), "growth_rate"] *= 1000
+        changed = EVQTI().backtest(shocked, train_years=6)
+
+        left = baseline.loc[baseline["window_end"].eq(2020)].iloc[0]
+        right = changed.loc[changed["window_end"].eq(2020)].iloc[0]
+
+        assert left["calibration_end_year"] == 2019
+        assert right["calibration_end_year"] == 2019
+        assert left["weight_stock"] == pytest.approx(right["weight_stock"])
+        assert left["weight_sales"] == pytest.approx(right["weight_sales"])
