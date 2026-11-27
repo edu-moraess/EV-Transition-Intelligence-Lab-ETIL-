@@ -142,6 +142,7 @@ class IEALoader:
         schema    = self._detect_schema(df_raw)
         agg       = Aggregator(df_raw, schema=schema)
         panel     = agg.build_panel(category=category, mode=mode)
+        panel["source_release"] = str(year)
 
         if countries_only:
             panel = self._filter_aggregates(panel)
@@ -203,6 +204,7 @@ class IEALoader:
         panel["mode"] = "Total"
         panel["share_coverage"] = panel[["share_coverage_sales", "share_coverage_stock"]].min(axis=1)
         panel["data_source"] = schema
+        panel["source_release"] = str(year)
         return panel.sort_values(["country", "year"]).reset_index(drop=True)
 
     def load_all_datasets(
@@ -220,7 +222,7 @@ class IEALoader:
         Returns
         -------
         pd.DataFrame
-            Same schema as load_dataset(), with data_source='combined'.
+            Same schema as load_dataset(), preserving source_release and with data_source='combined'.
         """
         panels = []
         for year in [2025, 2026]:
@@ -236,7 +238,7 @@ class IEALoader:
 
         combined = (
             pd.concat(panels, ignore_index=True)
-            .sort_values("data_source", ascending=False)   # 2026 first
+            .sort_values("source_release", ascending=False)  # 2026 first
             .drop_duplicates(subset=["country", "year"], keep="first")
             .sort_values(["country", "year"])
             .reset_index(drop=True)
