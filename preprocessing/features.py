@@ -112,9 +112,45 @@ class FeatureEngineer:
         self.df["momentum_3y"] = result
 
     def _add_volatility(self) -> None:
-        self.df["volatility"] = self.df.groupby("country", group_keys=False)["growth_rate"].apply(
-            lambda series: series.rolling(4, min_periods=2).std()
-        )
+        """Compute trailing volatility over four calendar-year positions.
+
+        Missing calendar years remain NaN. No interpolation or forward fill
+        is applied. At least two valid annual growth observations are
+        required. The statistic is the sample standard deviation (ddof=1).
+        """
+        result = pd.Series(np.nan, index=self.df.index, dtype=float)
+
+        for _, group in self.df.groupby("country", sort=False):
+            ordered = group.sort_values("year")
+            years = ordered["year"].astype(int)
+
+            growth = pd.Series(
+                pd.to_numeric(
+                    ordered["growth_rate"], errors="coerce"
+                ).to_numpy(),
+                index=years.to_numpy(),
+            )
+
+            full_years = range(
+                int(years.min()),
+                int(years.max()) + 1,
+            )
+
+            annual_growth = growth.reindex(full_years)
+
+            annual_volatility = (
+                annual_growth
+                .rolling(window=4, min_periods=2)
+                .std(ddof=1)
+            )
+
+            result.loc[ordered.index] = (
+                annual_volatility
+                .reindex(years.to_numpy())
+                .to_numpy()
+            )
+
+        self.df["volatility"] = result
 
     def _add_infrastructure_pressure(self) -> None:
         if {"ev_stock", "charging_points"}.issubset(self.df.columns):
