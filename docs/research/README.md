@@ -9,7 +9,7 @@ Esta pasta reúne os registros de pesquisa e reprodução associados à avaliaç
 ## Estado do pacote
 
 - Manuscrito v1.0 e resultados agregados registrados nesta branch.
-- Os CSVs/JSON originais gerados no Colab ainda não foram anexados; seus caminhos locais estão identificados no registro experimental.
+- Os nove artefatos experimentais em CSV/JSON, o manifesto SHA-256 e a nota de reprodução estão arquivados em [EVQTI_RESEARCH_ARTIFACTS_2026-11-27.zip](artifacts/EVQTI_RESEARCH_ARTIFACTS_2026-11-27.zip). O pacote foi validado e confirmado nesta branch; os arquivos individuais permanecem dentro do ZIP.
 - O nome por extenso do acrônimo ainda diverge entre o manuscrito (Electric Vehicle Transition Quality Index) e a docstring da implementação (EV Quant Transition Index). A nomenclatura foi preservada no manuscrito e a divergência está explicitada; harmonização exige decisão editorial explícita.
 - Os arquivos estão em PR draft e ainda não foram integrados à main.
 
