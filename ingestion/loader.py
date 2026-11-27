@@ -202,7 +202,9 @@ class IEALoader:
         if category == "Historical":
             panel = panel[~panel["year"].isin(_PROJECTION_YEARS)]
         panel["mode"] = "Total"
-        panel["share_coverage"] = panel[["share_coverage_sales", "share_coverage_stock"]].min(axis=1)
+        panel["share_coverage"] = panel[
+            ["share_coverage_sales", "share_coverage_stock"]
+        ].min(axis=1, skipna=False)
         panel["data_source"] = schema
         panel["source_release"] = str(year)
         return panel.sort_values(["country", "year"]).reset_index(drop=True)
