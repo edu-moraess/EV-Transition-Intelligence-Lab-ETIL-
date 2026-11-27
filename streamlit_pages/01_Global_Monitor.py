@@ -28,6 +28,13 @@ def _region(c):
     return "Other"
 
 
+def _format_share(value) -> str:
+    """Format a percentage without turning NaN into the literal 'nan%'."""
+    if value is None or pd.isna(value):
+        return "N/A"
+    return f"{float(value):.1f}%"
+
+
 def _global_sales_timeseries(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
     """Aggregate global EV sales, adding a per-capita series only when supported."""
     has_population = bool("population" in df.columns and df["population"].notna().any())
@@ -80,7 +87,7 @@ def render(df: pd.DataFrame):
     c2.metric("Market leader", top_c, f"{top_shr:.1f}% of global sales")
     c3.metric("Countries tracked", str(n_ctry))
     c4.metric("Median EV stock share",
-              f"{median_shr:.1f}%" if median_shr else "N/A",
+              _format_share(median_shr),
               help="Share of EVs in the total vehicle fleet — median across all countries.")
 
     st.markdown("---")
