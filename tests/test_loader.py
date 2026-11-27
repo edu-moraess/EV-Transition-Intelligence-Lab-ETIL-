@@ -80,3 +80,51 @@ class TestLoaderInstantiation:
     def test_loader_has_raw_dir_configured(self):
         loader = IEALoader()
         assert loader.raw_dir is not None
+
+
+class TestTotalDatasetCoverage:
+    def test_combined_coverage_is_missing_if_either_component_is_missing(monkeypatch):
+        class FakeAggregator:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def total_ev_all_modes(self, category):
+                return pd.DataFrame({
+                    "country": ["Norway"], "year": [2025],
+                    "ev_sales_total": [100.0],
+                })
+
+            def total_ev_stock_all_modes(self, category):
+                return pd.DataFrame({
+                    "country": ["Norway"], "year": [2025],
+                    "ev_stock_total": [500.0],
+                })
+
+            def charging_points(self, category):
+                return pd.DataFrame({
+                    "country": ["Norway"], "year": [2025],
+                    "charging_points": [10.0],
+                })
+
+            def total_ev_sales_share(self, category):
+                return pd.DataFrame({
+                    "country": ["Norway"], "year": [2025],
+                    "ev_sales_share": [20.0], "share_coverage": [1.0],
+                })
+
+            def total_ev_stock_share(self, category):
+                return pd.DataFrame({
+                    "country": ["Norway"], "year": [2025],
+                    "ev_stock_share": [float("nan")], "share_coverage": [float("nan")],
+                })
+
+        monkeypatch.setattr("ingestion.loader.Aggregator", FakeAggregator)
+        monkeypatch.setattr(
+            IEALoader, "load_raw",
+            lambda self, year: pd.DataFrame({"parameter": ["EV sales"]}),
+        )
+
+        result = IEALoader().load_total_dataset(2026)
+
+        assert pd.isna(result.loc[0, "share_coverage"])
+        assert pd.isna(result.loc[0, "ev_stock_share"])
