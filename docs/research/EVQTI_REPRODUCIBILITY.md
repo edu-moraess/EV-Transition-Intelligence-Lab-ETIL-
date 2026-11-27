@@ -20,7 +20,7 @@
 7. Confirmar nove janelas de 2016 a 2024 e calcular a média da coluna ic_mean.
 8. Para comparação com baselines, restringir o painel à coorte de 45 países completos nas nove janelas e manter a mesma amostra para todos os sinais.
 9. Para o bootstrap, executar 2.000 réplicas pareadas por país com seed 20261127, recalibrando o pipeline EVQTI em cada réplica e recalculando a normalização cross-sectional.
-10. Arquivar CSVs/JSON originais, parâmetros, ambiente, hashes dos dados e logs de execução junto ao relatório.
+10. Para uma nova execução, arquivar os CSVs/JSON originais, parâmetros, ambiente, hashes dos dados e logs de execução junto ao relatório. Os artefatos da execução documentada em 27/11/2026 estão preservados em [EVQTI_RESEARCH_ARTIFACTS_2026-11-27.zip](artifacts/EVQTI_RESEARCH_ARTIFACTS_2026-11-27.zip), com manifesto SHA-256 e nota de reprodução.
 
 ## Integridade temporal da implementação
 
@@ -34,12 +34,12 @@ A função _build_panel constrói lags por país e ano. Os limites de winsoriza�
 - O repositório não contém necessariamente os arquivos de dados licenciados.
 - O painel histórico final não permite reconstruir integralmente os vintages disponíveis em cada origem.
 - Os resultados bootstrap são condicionais ao painel e ao procedimento de amostragem documentados.
-- Os CSVs/JSON produzidos no Colab precisam ser anexados ao repositório; caminhos locais não são acessíveis a partir do GitHub.
+- Os CSVs/JSON desta execução estão arquivados dentro do ZIP de artefatos; caminhos locais do Colab não são acessíveis a partir do GitHub.
 
 ## Checklist de arquivamento
 
-- [ ] Arquivar os CSVs/JSON originais de walk-forward, baseline e bootstrap.
-- [ ] Registrar SHA-256 de cada artefato.
+- [x] Arquivar os CSVs/JSON originais de walk-forward, baseline e bootstrap no ZIP versionado.
+- [x] Registrar SHA-256 de cada artefato no manifesto incluído no ZIP.
 - [ ] Registrar versões de Python, pandas, numpy, scipy e scikit-learn.
 - [ ] Registrar parâmetros e seed em JSON.
 - [ ] Registrar log integral da execução e resumo de validação.
