@@ -34,3 +34,10 @@ def test_global_sales_timeseries_computes_per_capita_when_population_exists():
 
     assert has_population is True
     assert ts.loc[0, "per_capita"] == 1.0
+
+
+def test_format_share_handles_nan_none_zero_and_valid_values():
+    assert monitor._format_share(float("nan")) == "N/A"
+    assert monitor._format_share(None) == "N/A"
+    assert monitor._format_share(0.0) == "0.0%"
+    assert monitor._format_share(3.084) == "3.1%"
