@@ -100,16 +100,12 @@ A proporção bootstrap positiva é descritiva e não é um p-value formal.
 5. A análise não é plenamente vintage-aware: não utiliza snapshots históricos de publicação da IEA.
 6. Os resultados de 60 países (média 0,31308) e da coorte de 45 países (média 0,34159) pertencem a desenhos distintos.
 
-## 6. Artefatos gerados no Colab ainda não arquivados
+## 6. Arquivamento dos artefatos experimentais
 
-- /content/EVQTI_WALK_FORWARD_MAIN_75e43af.csv
-- /content/EVQTI_WALK_FORWARD_SUMMARY_75e43af.json
-- /content/ETIL_EVQTI_MAIN_WALK_FORWARD.csv
-- /content/ETIL_EVQTI_MAIN_SUMMARY.json
-- /content/ETIL_EVQTI_BASELINE_COMPARISON_V2.csv
-- /content/ETIL_EVQTI_BASELINE_SUMMARY_V2.json
-- /content/ETIL_EVQTI_FULL_PIPELINE_BOOTSTRAP.csv
-- /content/ETIL_EVQTI_FULL_PIPELINE_MODEL_INTERVALS.csv
-- /content/ETIL_EVQTI_FULL_PIPELINE_BOOTSTRAP.json
+O pacote de reprodução foi versionado nesta branch em:
 
-Esses arquivos não estão incorporados neste commit. A inclusão dos originais é necessária para arquivar as réplicas e tabelas completas; não foram reconstruídos CSVs a partir das estatísticas resumidas. Nenhum dado bruto da IEA foi copiado para este registro.
+`docs/research/artifacts/EVQTI_RESEARCH_ARTIFACTS_2026-11-27.zip`
+
+O ZIP contém nove artefatos experimentais em CSV/JSON, manifesto SHA-256 e nota de reprodução. A integridade do pacote foi validada antes do commit: SHA-256 do ZIP `6160aed8704bbab6afffa68eee17c7394ed97b030fa7036ef6d58db035de039a`; os nove arquivos CSV/JSON foram analisados e seus hashes conferidos com o manifesto. O arquivo compactado foi confirmado no GitHub nesta branch.
+
+Os arquivos individuais não foram expandidos como arquivos separados no repositório; permanecem preservados dentro do ZIP. Os caminhos locais usados durante a execução no Colab são referências históricas do ambiente de execução, não caminhos disponíveis no GitHub. Nenhum dado bruto da IEA foi copiado para este registro.
