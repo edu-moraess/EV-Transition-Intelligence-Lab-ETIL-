@@ -17,13 +17,13 @@ def render(df: pd.DataFrame):
     st.markdown("## EVQTI Ranking")
     st.markdown(
         "The **EV Quant Transition Index** answers a specific question: "
-        "*which countries are most likely to see the fastest EV growth over the next year?*"
+        "*which countries show adoption profiles historically associated with higher next-year EV sales growth?*"
     )
     st.markdown(
         "The answer is counterintuitive. Norway and the Netherlands — global EV leaders — "
         "rank low on EVQTI because their markets are maturing. Countries like Brazil, "
         "Indonesia and South Africa rank high because they have low penetration today "
-        "but are already accelerating. **Early-stage markets grow faster — that's Bass diffusion law.**"
+        "but may have room for faster adoption. **This is a diffusion hypothesis to test, not a deterministic law.**"
     )
     st.caption(
         f"Dataset: {dataset} · Signal built at t-1 · "
@@ -45,23 +45,22 @@ def render(df: pd.DataFrame):
             return
 
     # ── What the numbers mean ─────────────────────────────────────────────────
-    st.markdown("### Does the signal actually work?")
+    st.markdown("### Historical association — in-sample diagnostic")
     st.markdown(
-        "A factor is only useful if it predicts what it claims to predict. "
-        "Here we measure the **Information Coefficient (IC)** — "
-        "the correlation between the EVQTI score in year *t* and actual EV growth in year *t+1*. "
-        "An IC above 0.10 is considered a robust signal in quantitative research."
+        "The IC measures the association between the score in year *t* and observed EV growth in *t+1*. "
+        "These historical diagnostics use the fixed reference weights across the full available sample; "
+        "they are descriptive in-sample statistics, not out-of-sample evidence. An IC threshold is context-dependent."
     )
 
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Mean Rank IC", f"{s.get('ic_mean', 0):+.3f}",
-              help="Spearman correlation between EVQTI(t-1) and EV growth(t+1). Threshold: |IC| > 0.10.")
+              help="Spearman correlation in the historical in-sample diagnostic; it is not an out-of-sample estimate.")
     c2.metric("Information Ratio", f"{s.get('ir', 0):.2f}",
-              help="IC mean divided by IC standard deviation. IR > 0.5 = consistent signal.")
+              help="Historical mean Rank IC divided by its standard deviation; descriptive, sample-dependent.")
     c3.metric("Years with positive IC", f"{s.get('pct_positive', 0):.0f}%",
-              help="Proportion of years where the signal was in the right direction.")
+              help="Proportion of historical years with positive in-sample Rank IC.")
     c4.metric("Years statistically significant", f"{s.get('pct_sig', 0):.0f}%",
-              help="Years where IC was significant at p < 0.05.")
+              help="Nominal p < 0.05; no multiple-testing adjustment is applied.")
     c5.metric("Growth spread Q5 vs Q1", f"{s.get('spread_q5_q1', 0):.0f}pp",
               help="Countries in the top quintile grew this many percentage points faster than the bottom quintile.")
 
@@ -72,8 +71,8 @@ def render(df: pd.DataFrame):
     with col_a:
         st.markdown("##### IC by year — does the signal hold over time?")
         st.caption(
-            "Each bar is the correlation between EVQTI and next-year growth for that year. "
-            "The signal strengthens after 2020 as EV markets gained enough scale."
+            "Each bar is the historical in-sample association using the fixed reference weights. "
+            "It is descriptive and does not establish out-of-sample predictive performance."
         )
         if not ic_df.empty:
             fig_ic = go.Figure()
@@ -85,10 +84,8 @@ def render(df: pd.DataFrame):
                 hovertemplate="Year %{x}<br>Rank IC: %{y:.3f}<br>n=%{customdata} countries<extra></extra>",
                 customdata=ic_df["n"],
             ))
-            fig_ic.add_hline(y=0.10, line_dash="dot",
-                             line_color="rgba(128,128,128,0.4)", line_width=1,
-                             annotation_text="Robust threshold (0.10)",
-                             annotation_font_size=9)
+            fig_ic.add_hline(y=0, line_dash="dot",
+                             line_color="rgba(128,128,128,0.4)", line_width=1)
             lay = base_layout(300)
             lay.update({"yaxis": {**lay.get("yaxis",{}), "title": "Rank IC", "range": [-0.40, 0.60]},
                          "showlegend": False})
@@ -98,9 +95,8 @@ def render(df: pd.DataFrame):
     with col_b:
         st.markdown("##### Do high-EVQTI countries actually grow faster?")
         st.caption(
-            "Countries ranked in the top quintile (Q5) by EVQTI grew significantly faster "
-            "the following year than those in the bottom quintile (Q1). "
-            "A monotonically increasing chart confirms the factor is valid."
+            "Pooled in-sample growth by score quintile. This is descriptive and can be affected by "
+            "the fixed weights having been estimated on the full historical sample."
         )
         if not dec.empty:
             fig_dec = go.Figure(go.Bar(
@@ -121,17 +117,15 @@ def render(df: pd.DataFrame):
     st.markdown("---")
 
     # ── Backtest ──────────────────────────────────────────────────────────────
-    st.markdown("### Is the signal getting stronger or weaker over time?")
+    st.markdown("### Walk-forward evaluation — train-only calibration")
     st.markdown(
-        "A factor that worked once can simply be luck. To check, we measure the IC "
-        "in rolling test windows — without re-fitting the weights each time. "
-        "This shows whether the **same, fixed factor** keeps working as new years arrive, "
-        "which is a more honest test than re-optimising weights for every period."
+        "At each test origin, factor weights are calibrated only from the preceding training years. "
+        "The test score is evaluated against raw next-year growth, which is excluded from calibration. "
+        "This reduces weight-selection leakage. IEA release vintages are not available, so this is not a fully vintage-aware real-time backtest."
     )
     try:
         from models.scoring.evqti import EVQTI as _EVQTIClass
         bt_model = _EVQTIClass()
-        bt_model.fit(df)
         backtest_df = bt_model.backtest(df, train_years=6, test_years=1, step=1)
 
         if not backtest_df.empty:
@@ -143,24 +137,20 @@ def render(df: pd.DataFrame):
                 marker=dict(size=8, color=NAVY),
                 hovertemplate="Year %{x}<br>IC: %{y:.3f}<extra></extra>",
             ))
-            fig_bt.add_hline(y=0.10, line_dash="dot",
-                             line_color="rgba(128,128,128,0.4)", line_width=1,
-                             annotation_text="Robust threshold (0.10)",
-                             annotation_font_size=9)
-            lay_bt = base_layout(280, "Out-of-sample IC by test year (fixed weights)")
+            fig_bt.add_hline(y=0, line_dash="dot",
+                             line_color="rgba(128,128,128,0.4)", line_width=1)
+            lay_bt = base_layout(280, "Walk-forward Rank IC (train-only weights)")
             lay_bt.update({"yaxis": {**lay_bt.get("yaxis",{}), "title": "IC (test year)"},
                             "showlegend": False})
             fig_bt.update_layout(**lay_bt)
             st.plotly_chart(fig_bt, config=chart_config())
 
-            recent_ic = backtest_df["ic_mean"].tail(4).mean()
-            early_ic  = backtest_df["ic_mean"].head(4).mean()
-            trend = "strengthened" if recent_ic > early_ic else "weakened"
+            mean_oos_ic = backtest_df["ic_mean"].mean()
             st.caption(
-                f"The signal has **{trend}** over time: average IC was {early_ic:+.3f} "
-                f"in the earliest test years vs {recent_ic:+.3f} in the most recent ones. "
-                f"This is consistent with EV markets gaining enough scale for the cross-country "
-                f"signal to become statistically reliable."
+                f"Mean walk-forward Rank IC: {mean_oos_ic:+.3f} across "
+                f"{int(backtest_df['n_years'].sum())} test-year observations. "
+                "Interpret together with the yearly sample sizes and changing train-only weights; "
+                "do not interpret as a guaranteed forecast." 
             )
         else:
             st.info("Not enough historical years available for a rolling backtest.")
@@ -172,7 +162,7 @@ def render(df: pd.DataFrame):
     # ── Ranking ────────────────────────────────────────────────────────────────
     st.markdown("### Country ranking — where is opportunity concentrated?")
     st.markdown(
-        "Higher score = stronger early-stage signal = more likely to see above-average growth next year. "
+        "Higher score = stronger early-stage signal, historically associated with above-average next-year growth. "
         "This is not a quality ranking — a high score means the market is early, not that it is better."
     )
     n_show = st.slider("Countries to display", 10, len(rdf), min(30, len(rdf)))
@@ -249,21 +239,21 @@ def render(df: pd.DataFrame):
 **The logic:** Countries with low EV penetration today but positive momentum are in the early
 phase of the Bass diffusion curve — where growth is fastest. EVQTI scores these countries higher.
 
-**The maths:**
+**Reference score (full-sample descriptive weights):**
 
 | Feature | Direction | Weight | Empirical IC |
 |---|---|---|---|
 | EV stock share (t-1) | Negative — lower share = earlier stage | 48.5% | −0.259 (p<0.001) |
 | EV sales share (t-1) | Negative — lower share = earlier stage | 51.5% | −0.275 (p<0.001) |
 
-Growth rate was tested and excluded: IC = −0.037, p = 0.36 — no predictive power cross-country.
+These reference weights were empirically derived from the historical sample and are not themselves a point-in-time calibration. The walk-forward panel above recalibrates weights using training years only.
 
 **Steps:**
-1. Winsorise features at 1%–99% to remove outliers
-2. Create one-year lags (so no future information leaks into the signal)
-3. Z-score standardise per year across all countries
-4. Score = −(w₁·z₁ + w₂·z₂) — negative sign flips early-stage to positive
-5. Validate against actual next-year growth using Spearman correlation (Rank IC)
+1. Build exact calendar-year lags and expanding historical feature bounds
+2. Standardise each test-year cross-section
+3. Calibrate walk-forward weights from prior-year Rank ICs only
+4. Evaluate against raw next-year growth, not the clipped diagnostic target
+5. Treat annual release revisions as an unresolved vintage limitation
 
 **Source:** IEA Global EV Outlook 2025/2026
         """)
