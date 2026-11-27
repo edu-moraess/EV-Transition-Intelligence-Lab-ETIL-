@@ -11,6 +11,6 @@ Esta pasta reúne os registros de pesquisa e reprodução associados à avaliaç
 - Manuscrito v1.0 e resultados agregados registrados nesta branch.
 - Os nove artefatos experimentais em CSV/JSON, o manifesto SHA-256 e a nota de reprodução estão arquivados em [EVQTI_RESEARCH_ARTIFACTS_2026-11-27.zip](artifacts/EVQTI_RESEARCH_ARTIFACTS_2026-11-27.zip). O pacote foi validado e confirmado nesta branch; os arquivos individuais permanecem dentro do ZIP.
 - O nome por extenso do acrônimo ainda diverge entre o manuscrito (Electric Vehicle Transition Quality Index) e a docstring da implementação (EV Quant Transition Index). A nomenclatura foi preservada no manuscrito e a divergência está explicitada; harmonização exige decisão editorial explícita.
-- Os arquivos estão em PR draft e ainda não foram integrados à main.
+- A documentação e o pacote de artefatos foram integrados à `main` pelo PR #3 em 27/11/2026.
 
 A documentação não substitui os dados de origem, os artefatos completos por réplica ou uma reprodução independente do experimento.
